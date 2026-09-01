@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -123,11 +124,20 @@ func (s *Server) handlePodRecommendation(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleNodeHistory(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
+	if _, ok := s.watch.Node(name); !ok {
+		http.Error(w, "node not found", http.StatusNotFound)
+		return
+	}
 	end := time.Now()
 	start := end.Add(-24 * time.Hour)
 
-	cpuQuery := `sum(rate(node_cpu_seconds_total{mode!="idle",instance=~"` + name + `.*"}[5m])) * 1000`
-	memQuery := `sum(node_memory_MemTotal_bytes{instance=~"` + name + `.*"} - node_memory_MemAvailable_bytes{instance=~"` + name + `.*"})`
+	// name is confirmed to be a real, already-known node name above, and is
+	// additionally Go-quoted (compatible with PromQL's double-quoted string
+	// escaping) before being interpolated — defense in depth against PromQL
+	// injection even if a node name ever contained a quote character.
+	instanceMatcher := fmt.Sprintf("%q", name+".*")
+	cpuQuery := fmt.Sprintf(`sum(rate(node_cpu_seconds_total{mode!="idle",instance=~%s}[5m])) * 1000`, instanceMatcher)
+	memQuery := fmt.Sprintf(`sum(node_memory_MemTotal_bytes{instance=~%s} - node_memory_MemAvailable_bytes{instance=~%s})`, instanceMatcher, instanceMatcher)
 
 	cpu, err := s.prom.QueryRange(r.Context(), cpuQuery, start, end, 5*time.Minute)
 	if err != nil && err != promclient.ErrNotConfigured {

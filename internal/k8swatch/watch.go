@@ -289,6 +289,14 @@ func (s *Store) deletePod(obj interface{}) {
 	s.mu.Unlock()
 }
 
+// Node returns one node by name, or false if not found.
+func (s *Store) Node(name string) (NodeInfo, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	n, ok := s.nodes[name]
+	return n, ok
+}
+
 // Nodes returns a snapshot of every known node.
 func (s *Store) Nodes() []NodeInfo {
 	s.mu.RLock()

@@ -1,0 +1,57 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: drilleralertconfigs.driller.k8s.io
+spec:
+  group: driller.k8s.io
+  scope: Cluster
+  names:
+    plural: drilleralertconfigs
+    singular: drilleralertconfig
+    kind: DrillerAlertConfig
+    listKind: DrillerAlertConfigList
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                webhooks:
+                  type: array
+                  items:
+                    type: object
+                    required: ["type", "secretRef", "enabled"]
+                    properties:
+                      type:
+                        type: string
+                        enum: ["slack", "generic"]
+                      enabled:
+                        type: boolean
+                      secretRef:
+                        type: object
+                        required: ["name", "key"]
+                        properties:
+                          name:
+                            type: string
+                          key:
+                            type: string
+                thresholds:
+                  type: object
+                  properties:
+                    nodeMemLivePct:
+                      type: number
+                    nodeCpuLivePct:
+                      type: number
+                    overcommitEnabled:
+                      type: boolean
+                    oomRiskEnabled:
+                      type: boolean
+                    throttlingRiskEnabled:
+                      type: boolean
+                debounceMinutes:
+                  type: integer

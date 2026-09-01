@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k8s-driller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k8s-driller.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "k8s-driller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "k8s-driller.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "k8s-driller.fullname" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: driller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: DRILLER_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: DRILLER_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8s-driller.adminTokenSecretName" . }}
+                  key: {{ .Values.adminBootstrapToken.secretRef.key | default "token" }}
+            - name: DRILLER_SESSION_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8s-driller.sessionKeySecretName" . }}
+                  key: {{ .Values.sessionSigningKey.secretRef.key | default "key" }}
+            - name: DRILLER_OIDC_ISSUER_URL
+              value: {{ .Values.oidc.issuerUrl | quote }}
+            - name: DRILLER_OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientId | quote }}
+            - name: DRILLER_OIDC_REDIRECT_URL
+              value: {{ .Values.oidc.redirectUrl | quote }}
+            {{- if .Values.oidc.clientSecretRef.name }}
+            - name: DRILLER_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oidc.clientSecretRef.name }}
+                  key: {{ .Values.oidc.clientSecretRef.key }}
+            {{- end }}
+            - name: DRILLER_PROMETHEUS_ENABLED
+              value: {{ .Values.prometheus.enabled | quote }}
+            - name: DRILLER_PROMETHEUS_BASE_URL
+              value: {{ .Values.prometheus.baseUrl | quote }}
+            - name: DRILLER_METRICS_POLL_INTERVAL
+              value: {{ printf "%ds" (.Values.metricsPoll.intervalSeconds | int) | quote }}
+            - name: DRILLER_RECOMMENDATION_LOOKBACK_HOURS
+              value: {{ .Values.recommendation.lookbackHours | quote }}
+            - name: DRILLER_CPU_LIMIT_MULTIPLIER
+              value: {{ .Values.recommendation.cpuLimitMultiplier | quote }}
+            - name: DRILLER_MEM_LIMIT_MULTIPLIER
+              value: {{ .Values.recommendation.memLimitMultiplier | quote }}
+            - name: DRILLER_WASTEFUL_THRESHOLD_PCT
+              value: {{ .Values.recommendation.wastefulThresholdPct | quote }}
+            - name: DRILLER_RECOMMENDATION_HEADROOM_PCT
+              value: {{ .Values.recommendation.headroomPct | quote }}
+            - name: DRILLER_OOM_RISK_THRESHOLD_PCT
+              value: {{ .Values.pressureThresholds.oomRiskThresholdPct | quote }}
+            - name: DRILLER_THROTTLING_THRESHOLD_PCT
+              value: {{ .Values.pressureThresholds.throttlingThresholdPct | quote }}
+            - name: DRILLER_THROTTLING_CONSECUTIVE_POLLS
+              value: {{ .Values.pressureThresholds.throttlingConsecutivePolls | quote }}
+            - name: DRILLER_INTEGRATIONS_VPA_ENABLED
+              value: {{ .Values.integrations.vpa.enabled | quote }}
+            - name: DRILLER_INTEGRATIONS_OPENCOST_ENABLED
+              value: {{ .Values.integrations.opencost.enabled | quote }}
+            - name: DRILLER_INTEGRATIONS_OPENCOST_BASE_URL
+              value: {{ .Values.integrations.opencost.baseUrl | quote }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

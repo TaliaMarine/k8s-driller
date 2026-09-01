@@ -1,0 +1,46 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: drilleruserroles.driller.k8s.io
+spec:
+  group: driller.k8s.io
+  scope: Cluster
+  names:
+    plural: drilleruserroles
+    singular: drilleruserrole
+    kind: DrillerUserRole
+    listKind: DrillerUserRoleList
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Subject
+          type: string
+          jsonPath: .spec.subject
+        - name: Role
+          type: string
+          jsonPath: .spec.role
+        - name: Updated
+          type: string
+          jsonPath: .spec.updatedAt
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["subject", "role"]
+              properties:
+                subject:
+                  type: string
+                  description: OIDC subject claim (issuer-qualified).
+                email:
+                  type: string
+                role:
+                  type: string
+                  enum: ["admin", "viewer"]
+                updatedBy:
+                  type: string
+                updatedAt:
+                  type: string

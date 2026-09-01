@@ -1,0 +1,31 @@
+{{- if eq .Values.ingress.type "nginx" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "k8s-driller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k8s-driller.labels" . | nindent 4 }}
+  {{- with .Values.ingress.nginx.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.nginx.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" (include "k8s-driller.fullname" .)) }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "k8s-driller.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

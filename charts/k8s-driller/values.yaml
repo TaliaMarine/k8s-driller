@@ -1,0 +1,112 @@
+# Default values for k8s-driller. See SPECS.md §8.4 for the rationale
+# behind each group of keys.
+
+replicaCount: 1 # SSE hub state is in-memory; see SPECS.md §8.4 single-replica note.
+
+image:
+  repository: ghcr.io/taliamarine/k8s-driller
+  tag: "" # defaults to Chart.appVersion
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+networkPolicy:
+  enabled: false
+
+# --- OIDC (SPECS.md §4.1) ---
+oidc:
+  issuerUrl: ""
+  clientId: ""
+  clientSecretRef:
+    name: ""
+    key: ""
+  redirectUrl: ""
+
+# --- Admin bootstrap token (SPECS.md §4.1) ---
+adminBootstrapToken:
+  autoGenerate: true
+  secretRef:
+    name: ""
+    key: "token"
+
+# Session cookie signing key. Auto-generated if secretRef is unset.
+sessionSigningKey:
+  autoGenerate: true
+  secretRef:
+    name: ""
+    key: "key"
+
+# --- Prometheus (history + recommendations only, SPECS.md §4.1) ---
+prometheus:
+  enabled: false
+  baseUrl: ""
+
+metricsPoll:
+  intervalSeconds: 15
+
+recommendation:
+  lookbackHours: 24
+  cpuLimitMultiplier: 2.0
+  memLimitMultiplier: 1.5
+  wastefulThresholdPct: 70
+  headroomPct: 10
+
+pressureThresholds:
+  oomRiskThresholdPct: 90
+  throttlingThresholdPct: 95
+  throttlingConsecutivePolls: 3
+
+# --- Optional complementary integrations (SPECS.md §11), off by default ---
+integrations:
+  vpa:
+    enabled: false
+  opencost:
+    enabled: false
+    baseUrl: ""
+
+# --- Ingress: exactly one of nginx/gateway-api is rendered (SPECS.md §8.3) ---
+ingress:
+  type: none # none | nginx | gateway-api
+  host: ""
+  tls:
+    enabled: true
+    secretName: ""
+  nginx:
+    className: nginx
+    annotations: {}
+  gatewayApi:
+    gatewayName: ""
+    gatewayNamespace: ""
+    sectionName: https

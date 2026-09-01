@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.27"
+          cache-dependency-path: go.sum
+      - run: go build ./...
+      - run: go vet ./...
+      - run: gofmt -l . | tee /tmp/gofmt.out && test ! -s /tmp/gofmt.out
+      - run: go test ./... -race
+
+  frontend:
+    name: Frontend (Vue)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+      - run: helm lint charts/k8s-driller
+      - name: Render every ingress mode
+        run: |
+          helm template charts/k8s-driller --set ingress.type=none
+          helm template charts/k8s-driller --set ingress.type=nginx --set ingress.host=driller.example.com
+          helm template charts/k8s-driller --set ingress.type=gateway-api --set ingress.host=driller.example.com --set ingress.gatewayApi.gatewayName=my-gw
+      - name: Render optional integrations and Prometheus toggles
+        run: |
+          helm template charts/k8s-driller --set integrations.vpa.enabled=true --set integrations.opencost.enabled=true
+          helm template charts/k8s-driller --set prometheus.enabled=true --set prometheus.baseUrl=http://prometheus.monitoring:9090
+      - name: Enforce the read-only RBAC guarantee (SPECS.md §4.2/§8.2)
+        run: |
+          set -euo pipefail
+          allowed_resources="drilleruserroles drilleralertconfigs secrets"
+          allowed_verbs="get list watch"
+          violation=0
+          while IFS= read -r rule; do
+            for resource in $(echo "$rule" | jq -r '.resources[]'); do
+              case " $allowed_resources " in *" $resource "*) continue ;; esac
+              for verb in $(echo "$rule" | jq -r '.verbs[]'); do
+                case " $allowed_verbs " in
+                  *" $verb "*) ;;
+                  *)
+                    echo "::error::disallowed verb '$verb' on resource '$resource'"
+                    violation=1
+                    ;;
+                esac
+              done
+            done
+          done < <(helm template charts/k8s-driller --set integrations.vpa.enabled=true \
+            | yq -N 'select(.kind == "ClusterRole" or .kind == "Role") | .rules[]' -o json \
+            | jq -c '.')
+          exit "$violation"
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: false

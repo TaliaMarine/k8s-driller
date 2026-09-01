@@ -1,5 +1,13 @@
 # Kubernetes Driller
 
+> **⚠️ AI-generated codebase.** The spec, backend, frontend, Helm chart, CI/CD, and this README were written
+> by an AI coding agent (Claude), directed and reviewed by a human. It has been built, tested, and smoke-run
+> against a real cluster (see commit history), but it has not had the level of scrutiny you'd expect before
+> running it against a production cluster with real user data. Review the code — especially
+> [`internal/pressure`](./internal/pressure), RBAC in
+> [`charts/k8s-driller/templates/clusterrole.yaml`](./charts/k8s-driller/templates/clusterrole.yaml),
+> and auth in [`internal/auth`](./internal/auth) — before trusting it with anything that matters.
+
 **Real-time cluster pressure and misconfiguration dashboard.** Kubernetes Driller answers one question at
 a glance: *which nodes and pods are under pressure, and why?* It overlays configured requests/limits
 against live usage, flags pods running without resource requests/limits ("Wild-West" workloads), and

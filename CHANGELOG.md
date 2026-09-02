@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.0.1...v2.1.0) (2026-09-02)
+
+
+### Features
+
+* publish the Helm chart as an OCI artifact alongside the image ([22df6fa](https://github.com/TaliaMarine/k8s-driller/commit/22df6fac9e1b3089643dc40a9c080fdc78d532c2))
+
+
+### Bug Fixes
+
+* bump remaining CI actions off deprecated Node.js 20 runtime ([27961fc](https://github.com/TaliaMarine/k8s-driller/commit/27961fc6f2b1cc80721345dce66096ded9120eed))
+
 ## [2.0.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.0.0...v2.0.1) (2026-09-02)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.0...v2.1.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* use numeric USER in Dockerfile so kubelet can verify non-root ([cf0f8e3](https://github.com/TaliaMarine/k8s-driller/commit/cf0f8e3881384b296a55736a3ae37997c80c6c9c))
+
 ## [2.1.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.0.1...v2.1.0) (2026-09-02)
 
 

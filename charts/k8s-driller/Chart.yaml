@@ -4,8 +4,8 @@ description: >-
   Real-time Kubernetes node/pod resource pressure and misconfiguration dashboard
   (SPECS.md).
 type: application
-version: 2.1.0
-appVersion: 2.1.0
+version: 2.1.1
+appVersion: 2.1.1
 home: https://github.com/TaliaMarine/k8s-driller
 sources:
   - https://github.com/TaliaMarine/k8s-driller

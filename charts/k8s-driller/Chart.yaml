@@ -1,9 +1,11 @@
 apiVersion: v2
 name: k8s-driller
-description: Real-time Kubernetes node/pod resource pressure and misconfiguration dashboard (SPECS.md).
+description: >-
+  Real-time Kubernetes node/pod resource pressure and misconfiguration dashboard
+  (SPECS.md).
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 1.0.0
+appVersion: 1.0.0
 home: https://github.com/TaliaMarine/k8s-driller
 sources:
   - https://github.com/TaliaMarine/k8s-driller

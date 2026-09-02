@@ -20,6 +20,13 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=backend /driller ./driller
 COPY --from=frontend /src/frontend/dist ./frontend/dist
-USER nonroot:nonroot
+# Numeric, not the name "nonroot": distroless has no /etc/passwd, so naming
+# the user here (even though it matches the base image's own default)
+# overwrites the image config's User field with an unresolvable string.
+# Kubernetes' kubelet then refuses to start the pod under
+# securityContext.runAsNonRoot (it can't verify a non-numeric user is
+# actually non-root) with "cannot verify user is non-root". 65532:65532 is
+# the UID:GID distroless's own nonroot user already resolves to.
+USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/app/driller"]

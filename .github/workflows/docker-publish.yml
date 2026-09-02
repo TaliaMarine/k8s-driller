@@ -44,7 +44,16 @@ jobs:
         env:
           RAW_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          version="${RAW_TAG#v}"
+          set -euo pipefail
+          # Extract the trailing X.Y.Z regardless of any tag prefix (v1.2.3,
+          # k8s-driller-v1.2.3, etc.) — robust to release-please's tag format,
+          # which is config-driven (release-please-config.json
+          # include-component-in-tag) and has changed once already.
+          version=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+$' <<<"$RAW_TAG" || true)
+          if [ -z "$version" ]; then
+            echo "::error::could not extract a semver version from tag '$RAW_TAG'"
+            exit 1
+          fi
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           {
             echo "version=$version"

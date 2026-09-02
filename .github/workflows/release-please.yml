@@ -1,0 +1,51 @@
+name: Release Please
+
+# Watches main for Conventional Commits and maintains a release PR. Merging
+# that PR creates a git tag + GitHub Release and bumps the version baked
+# into charts/k8s-driller/Chart.yaml (version + appVersion) and
+# frontend/package.json — see release-please-config.json.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write # needed to dispatch docker-publish.yml below
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  trigger-publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch image publish for ${{ needs.release-please.outputs.tag_name }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          # release-please used the default GITHUB_TOKEN to create the tag/release
+          # above, which (by GitHub's design, to prevent recursive runs) does NOT
+          # trigger docker-publish.yml's tag-push trigger on its own. Dispatch it
+          # explicitly instead — this call is a distinct API action, not a ref
+          # push, so it isn't subject to that same restriction.
+          gh workflow run docker-publish.yml \
+            --repo "${{ github.repository }}" \
+            --ref "$TAG_NAME" \
+            --field "tag=$TAG_NAME"

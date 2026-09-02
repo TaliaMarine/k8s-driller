@@ -117,6 +117,28 @@ RBAC never grants a write verb outside the app's own CRDs. Every GitHub Action r
 workflows is pinned to a full commit SHA (enforced by `.github/workflows/pinact-check.yml` via
 [pinact](https://github.com/suzuki-shunsuke/pinact)).
 
+## Releases
+
+Versioning is driven by [Release Please](https://github.com/googleapis/release-please) reading
+[Conventional Commits](https://www.conventionalcommits.org/) on `main`:
+
+1. `.github/workflows/release-please.yml` watches `main` and keeps a "release PR" up to date with an
+   accumulated changelog.
+2. Merging that PR makes release-please tag a release (e.g. `v0.2.0`) and bump the version in
+   `charts/k8s-driller/Chart.yaml` (both `version` and `appVersion`) and `frontend/package.json` — see
+   [`release-please-config.json`](./release-please-config.json).
+3. That same job then explicitly dispatches `.github/workflows/docker-publish.yml` for the new tag (a plain
+   tag-push trigger won't fire here, since release-please's own `GITHUB_TOKEN`-created tag is exempt from
+   triggering further workflow runs by GitHub's design). That workflow builds and pushes
+   `ghcr.io/<owner>/k8s-driller` tagged `X.Y.Z`, `X.Y`, `X`, and `latest`.
+
+Because the chart's `appVersion` is bumped to the exact tag that gets published, and
+`values.yaml`'s `image.tag` defaults to `.Chart.AppVersion` when unset, installing the chart at a given
+version pulls the matching image with no manual coordination.
+
+**Commit messages must follow Conventional Commits** (`feat: ...`, `fix: ...`, `chore: ...`, etc.) for
+release-please to detect a version bump — commits without one of those prefixes won't trigger a release PR.
+
 ## Project layout
 
 ```

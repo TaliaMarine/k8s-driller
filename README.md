@@ -65,6 +65,23 @@ Full product/architecture spec: [SPECS.md](./SPECS.md).
 
 ### Install with Helm
 
+The chart is published as an OCI artifact on every release, next to the image:
+`oci://ghcr.io/taliamarine/charts/k8s-driller`. Install a specific released version directly from there:
+
+```sh
+helm install driller oci://ghcr.io/taliamarine/charts/k8s-driller --version 2.0.1 \
+  --namespace driller --create-namespace \
+  --set oidc.issuerUrl=https://your-issuer.example.com \
+  --set oidc.clientId=<client-id> \
+  --set oidc.clientSecretRef.name=<secret-name> \
+  --set oidc.clientSecretRef.key=<secret-key> \
+  --set oidc.redirectUrl=https://driller.example.com/api/v1/auth/callback \
+  --set ingress.type=nginx \
+  --set ingress.host=driller.example.com
+```
+
+Or install straight from a checked-out copy of this repo (e.g. for local chart changes):
+
 ```sh
 helm install driller ./charts/k8s-driller \
   --namespace driller --create-namespace \
@@ -129,8 +146,10 @@ Versioning is driven by [Release Please](https://github.com/googleapis/release-p
    [`release-please-config.json`](./release-please-config.json).
 3. That same job then explicitly dispatches `.github/workflows/docker-publish.yml` for the new tag (a plain
    tag-push trigger won't fire here, since release-please's own `GITHUB_TOKEN`-created tag is exempt from
-   triggering further workflow runs by GitHub's design). That workflow builds and pushes
-   `ghcr.io/<owner>/k8s-driller` tagged `X.Y.Z`, `X.Y`, `X`, and `latest`.
+   triggering further workflow runs by GitHub's design). That workflow:
+   - builds and pushes the image to `ghcr.io/<owner>/k8s-driller` tagged `X.Y.Z`, `X.Y`, `X`, and `latest`;
+   - packages and pushes the chart to `oci://ghcr.io/<owner>/charts/k8s-driller` tagged `X.Y.Z`, failing the
+     run if `Chart.yaml`'s version doesn't match the release tag.
 
 Because the chart's `appVersion` is bumped to the exact tag that gets published, and
 `values.yaml`'s `image.tag` defaults to `.Chart.AppVersion` when unset, installing the chart at a given

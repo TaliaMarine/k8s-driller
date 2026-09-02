@@ -1,4 +1,4 @@
-// Package v1alpha1 defines the driller.k8s.io custom resource types used as
+// Package v1alpha1 defines the driller.dev custom resource types used as
 // k8s-driller's only persistent state (SPECS.md §5) — user role assignments
 // and alert/webhook configuration. There is no generated clientset; these
 // types are read/written through the dynamic client and unstructured
@@ -9,7 +9,7 @@ package v1alpha1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 const (
-	GroupName = "driller.k8s.io"
+	GroupName = "driller.dev"
 	Version   = "v1alpha1"
 
 	KindUserRole    = "DrillerUserRole"

@@ -43,7 +43,7 @@ Full product/architecture spec: [SPECS.md](./SPECS.md).
  metrics-server ──poll───┼──▶  Go backend  ──SSE──▶  Vue 3 + Vuetify SPA
                          │      (cmd/driller)
  Prometheus (optional) ──┘         │
-   history/recommendations         └─▶ driller.k8s.io CRDs (roles, alert config — the only persisted state)
+   history/recommendations         └─▶ driller.dev CRDs (roles, alert config — the only persisted state)
 ```
 
 - **Backend** (`cmd/driller`, `internal/`): informer-based topology (`k8swatch`), a metrics-server client
@@ -52,7 +52,7 @@ Full product/architecture spec: [SPECS.md](./SPECS.md).
   (`internal/auth`), and an alert dispatcher for Slack/generic webhooks.
 - **Frontend** (`frontend/`): Vue 3 + Vuetify 4, Pinia for state, one `EventSource` subscription per view.
 - **State**: no database. The only things that survive a restart — user role assignments and alert config —
-  are stored as `driller.k8s.io` custom resources, read/written via the dynamic client.
+  are stored as `driller.dev` custom resources, read/written via the dynamic client.
 
 ## Quickstart
 
@@ -148,7 +148,7 @@ internal/
   k8swatch/               informer-based cluster topology
   metricsclient/          metrics-server client (live usage)
   promclient/             Prometheus client (history/recommendations only)
-  crdstore/               CRUD for the driller.k8s.io CRDs (dynamic client, no codegen)
+  crdstore/               CRUD for the driller.dev CRDs (dynamic client, no codegen)
   auth/                   OIDC login, signed sessions, admin bootstrap token
   sse/                    the SSE hub
   alerts/                 Slack/generic webhook dispatch with debounce

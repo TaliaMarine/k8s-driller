@@ -21,7 +21,7 @@ pass/fail for each — this is a mechanical verification pass, not a design revi
    - `helm template charts/k8s-driller --set integrations.vpa.enabled=true`
    - `helm template charts/k8s-driller --set integrations.opencost.enabled=true`
 5. Extract every `ClusterRole`/`Role` from a default render and grep its `verbs:` lists — fail the check if
-   any resource outside `driller.k8s.io` (and `verticalpodautoscalers` when the VPA integration is on) has
+   any resource outside `driller.dev` (and `verticalpodautoscalers` when the VPA integration is on) has
    any verb other than `get`, `list`, or `watch`. This mirrors the read-only guarantee in SPECS.md §4.2/§8.2.
 6. Confirm the CRD files under the chart's top-level `crds/` directory are valid YAML and their
    `metadata.name`/`spec.names` match SPECS.md §5 (`drilleruserroles`, `drilleralertconfigs`).

@@ -1,7 +1,7 @@
 {{- /*
 Read-only guarantee (SPECS.md §4.2/§8.2): no verb below workload/node
 resources is ever anything but get/list/watch. The only write verbs granted
-anywhere in this file are scoped to the app's own driller.k8s.io CRDs.
+anywhere in this file are scoped to the app's own driller.dev CRDs.
 */ -}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -19,7 +19,7 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes", "pods"]
     verbs: ["get", "list"]
-  - apiGroups: ["driller.k8s.io"]
+  - apiGroups: ["driller.dev"]
     resources: ["drilleruserroles", "drilleralertconfigs"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   {{- if .Values.integrations.vpa.enabled }}

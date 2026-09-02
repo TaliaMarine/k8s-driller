@@ -1,5 +1,5 @@
 // Package crdstore is the only persistence layer k8s-driller has: CRUD
-// against the driller.k8s.io custom resources (SPECS.md §5) via the dynamic
+// against the driller.dev custom resources (SPECS.md §5) via the dynamic
 // client, so no generated clientset or controller-runtime scheme is needed.
 package crdstore
 

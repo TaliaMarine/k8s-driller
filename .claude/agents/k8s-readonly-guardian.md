@@ -19,11 +19,11 @@ style preference — treat any violation as a blocking finding, not a suggestion
    any other workload/node resource is a violation. The only legitimate write targets are the app's own
    CRDs (`DrillerUserRole`, `DrillerAlertConfig`) — verify the object type in each call.
 2. **ClusterRole / Role manifests**: read every `rules:` block in the Helm chart's RBAC templates. Verbs on
-   any group/resource outside `driller.k8s.io` (and, if the optional VPA integration from SPECS.md §11 is
+   any group/resource outside `driller.dev` (and, if the optional VPA integration from SPECS.md §11 is
    present, `verticalpodautoscalers`) must be limited to `get`, `list`, `watch`. Flag `create`, `update`,
    `patch`, `delete`, `deletecollection`, or wildcard `*` verbs immediately.
 3. **Admin/API write endpoints**: confirm the only REST endpoints that mutate state are the ones in
-   SPECS.md §6.1 scoped to `driller.k8s.io` CRDs (role assignment, alert config) — nothing under
+   SPECS.md §6.1 scoped to `driller.dev` CRDs (role assignment, alert config) — nothing under
    `/api/v1/nodes`, `/api/v1/pods`, etc. should accept POST/PUT/PATCH/DELETE.
 4. **Dependency creep**: if a new library wraps `kubectl`-equivalent behavior (e.g. exec, port-forward,
    eviction), flag its mere presence even before it's wired up — it signals scope drift from SPECS.md §1.2.

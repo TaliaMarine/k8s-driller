@@ -97,7 +97,7 @@ release name: `k8s-driller`.
 | Metrics (history/recs) | Prometheus HTTP API (PromQL), official `prometheus/client_golang/api` |
 | Realtime transport | Server-Sent Events only (`text/event-stream`), no WebSocket server |
 | Auth | OIDC (`coreos/go-oidc` or `golang.org/x/oauth2`) for user login; a separate bootstrap **admin token** (env var/Secret) for first-run role assignment |
-| State storage | Kubernetes CRDs (via a small CRD group `driller.k8s.io`) — no database, no PVC |
+| State storage | Kubernetes CRDs (via a small CRD group `driller.dev`) — no database, no PVC |
 | Frontend framework | Vue 3 (Composition API) |
 | State management | Pinia (holds the SSE-derived reactive cluster/node/pod state) |
 | UI library | Vuetify 4+ (Material 3 component set — cards, progress-linear, badges, theming) |
@@ -157,12 +157,12 @@ calls.
 
 ## 5. Data Model (CRDs)
 
-Group: `driller.k8s.io/v1alpha1`, cluster-scoped.
+Group: `driller.dev/v1alpha1`, cluster-scoped.
 
 ### 5.1 `DrillerUserRole`
 
 ```yaml
-apiVersion: driller.k8s.io/v1alpha1
+apiVersion: driller.dev/v1alpha1
 kind: DrillerUserRole
 metadata:
   name: <sanitized-oidc-subject-hash>
@@ -177,7 +177,7 @@ spec:
 ### 5.2 `DrillerAlertConfig`
 
 ```yaml
-apiVersion: driller.k8s.io/v1alpha1
+apiVersion: driller.dev/v1alpha1
 kind: DrillerAlertConfig
 metadata:
   name: default
@@ -295,8 +295,8 @@ charts/k8s-driller/
     poddisruptionbudget.yaml      # optional
     networkpolicy.yaml            # optional, default-deny except k8s API + DNS + Prometheus/webhook targets
   crds/
-    driller.k8s.io_drilleruserroles.yaml     # DrillerUserRole CRD
-    driller.k8s.io_drilleralertconfigs.yaml  # DrillerAlertConfig CRD
+    driller.dev_drilleruserroles.yaml     # DrillerUserRole CRD
+    driller.dev_drilleralertconfigs.yaml  # DrillerAlertConfig CRD
 ```
 
 CRDs live in the chart's top-level `crds/` directory rather than under `templates/`, per Helm's own convention for
@@ -316,7 +316,7 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes", "pods"]
     verbs: ["get", "list"]
-  - apiGroups: ["driller.k8s.io"]
+  - apiGroups: ["driller.dev"]
     resources: ["drilleruserroles", "drilleralertconfigs"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]   # own CRDs only
 ```

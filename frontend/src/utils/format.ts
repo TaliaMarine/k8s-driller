@@ -1,3 +1,17 @@
+import type { NodeHealth } from '@/types/api'
+
+/** Maps a node's health label to the shared severity theme color (SPECS.md §7.2). */
+export function nodeHealthColor(health: NodeHealth): string {
+  switch (health) {
+    case 'Healthy':
+      return 'healthy'
+    case 'Overcommit':
+      return 'critical'
+    default:
+      return 'warning'
+  }
+}
+
 /** Formats millicores the way Kubernetes resource specs are usually read. */
 export function formatCpu(millicores: number): string {
   if (millicores >= 1000) return `${(millicores / 1000).toFixed(millicores % 1000 === 0 ? 0 : 1)}`

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"sort"
+
 	"github.com/TaliaMarine/k8s-driller/internal/k8swatch"
 	"github.com/TaliaMarine/k8s-driller/internal/pressure"
 )
@@ -68,8 +70,30 @@ func (s *Server) buildNodeDTO(n k8swatch.NodeInfo) NodeDTO {
 	}
 }
 
+// buildNodePodDTOs fetches every pod on a node and returns their DTOs in a
+// stable order (namespace, then pod name). k8swatch.Store.PodsOnNode backs
+// onto a Go map internally, so its iteration order is randomized on every
+// call — without sorting here, the pod list (and therefore the frontend's
+// rendering, including which expansion panels stay open) reshuffles on
+// every single SSE push.
+func (s *Server) buildNodePodDTOs(nodeName string) []PodDTO {
+	pods := s.watch.PodsOnNode(nodeName)
+	sort.Slice(pods, func(i, j int) bool {
+		if pods[i].Namespace != pods[j].Namespace {
+			return pods[i].Namespace < pods[j].Namespace
+		}
+		return pods[i].Name < pods[j].Name
+	})
+	dtos := make([]PodDTO, 0, len(pods))
+	for _, p := range pods {
+		dtos = append(dtos, s.buildPodDTO(p))
+	}
+	return dtos
+}
+
 func (s *Server) buildClusterSummary() ClusterSummaryDTO {
 	nodes := s.watch.Nodes()
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
 	nodeDTOs := make([]NodeDTO, 0, len(nodes))
 
 	var totalCapCPU, totalCapMem, totalReqCPU, totalReqMem, totalLiveCPU, totalLiveMem int64

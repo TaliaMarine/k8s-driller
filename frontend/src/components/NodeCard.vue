@@ -1,20 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { NodeDTO } from '@/types/api'
+import { nodeHealthColor } from '@/utils/format'
 import ResourceBar from './ResourceBar.vue'
 
 const props = defineProps<{ node: NodeDTO }>()
 
-const healthColor = computed(() => {
-  switch (props.node.health) {
-    case 'Healthy':
-      return 'healthy'
-    case 'Overcommit':
-      return 'critical'
-    default:
-      return 'warning'
-  }
-})
+const healthColor = computed(() => nodeHealthColor(props.node.health))
 </script>
 
 <template>

@@ -1,17 +1,131 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEventSource } from '@/composables/useEventSource'
+import { useClusterStore } from '@/stores/cluster'
 import type { PodDTO } from '@/types/api'
-import { formatCpu, formatMem } from '@/utils/format'
+import { formatCpu, formatMem, nodeHealthColor } from '@/utils/format'
 import DeltaBars from '@/components/DeltaBars.vue'
+import NodeDistributionChart from '@/components/NodeDistributionChart.vue'
+import type { DistSegment } from '@/components/NodeDistributionChart.vue'
 
 const props = defineProps<{ name: string }>()
 const router = useRouter()
+const clusterStore = useClusterStore()
 
 const { status, data: pods } = useEventSource<PodDTO[]>(`/api/v1/stream/nodes/${props.name}`)
 
-const wildWestPods = computed(() => (pods.value ?? []).filter((p) => p.wildWest))
+const node = computed(() => clusterStore.summary?.nodes.find((n) => n.name === props.name))
+
+function podKey(pod: PodDTO): string {
+  return `${pod.namespace}/${pod.name}`
+}
+
+function containerAllocation(
+  pod: PodDTO,
+  field: 'requestsCpu' | 'requestsMem' | 'limitsCpu' | 'limitsMem',
+) {
+  return pod.containers.reduce((sum, c) => sum + (c[field] ?? 0), 0)
+}
+
+// --- distribution chart: always reflects the whole node, independent of filters below ---
+
+const cpuRequestSegments = computed<DistSegment[]>(
+  () =>
+    pods.value
+      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'requestsCpu') }))
+      .filter((s) => s.value > 0) ?? [],
+)
+const cpuLimitSegments = computed<DistSegment[]>(
+  () =>
+    pods.value
+      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'limitsCpu') }))
+      .filter((s) => s.value > 0) ?? [],
+)
+const memRequestSegments = computed<DistSegment[]>(
+  () =>
+    pods.value
+      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'requestsMem') }))
+      .filter((s) => s.value > 0) ?? [],
+)
+const memLimitSegments = computed<DistSegment[]>(
+  () =>
+    pods.value
+      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'limitsMem') }))
+      .filter((s) => s.value > 0) ?? [],
+)
+const cpuUsageTotal = computed(
+  () => ((node.value?.pressure.liveCpuPct ?? 0) / 100) * (node.value?.capacityCpu ?? 0),
+)
+const memUsageTotal = computed(
+  () => ((node.value?.pressure.liveMemPct ?? 0) / 100) * (node.value?.capacityMemory ?? 0),
+)
+
+// --- filters ---
+
+const search = ref('')
+const namespaceFilter = ref<string | null>(null)
+const activeFilters = ref<string[]>([])
+
+const FILTER_OPTIONS = [
+  { value: 'misconfigured', label: 'Misconfigured' },
+  { value: 'missing-cpu-request', label: 'Missing CPU request' },
+  { value: 'missing-cpu-limit', label: 'Missing CPU limit' },
+  { value: 'missing-mem-request', label: 'Missing mem request' },
+  { value: 'missing-mem-limit', label: 'Missing mem limit' },
+  { value: 'oom-risk', label: 'OOM-Risk' },
+  { value: 'throttling-risk', label: 'Throttling-Risk' },
+]
+
+const namespaceOptions = computed(() =>
+  [...new Set((pods.value ?? []).map((p) => p.namespace))].sort(),
+)
+
+function hasMissing(pod: PodDTO, field: keyof PodDTO['containers'][number]['wildWest']): boolean {
+  return pod.containers.some((c) => c.wildWest[field])
+}
+
+function matchesFilter(pod: PodDTO, filter: string): boolean {
+  switch (filter) {
+    case 'misconfigured':
+      return pod.wildWest
+    case 'missing-cpu-request':
+      return hasMissing(pod, 'missingRequestsCpu')
+    case 'missing-cpu-limit':
+      return hasMissing(pod, 'missingLimitsCpu')
+    case 'missing-mem-request':
+      return hasMissing(pod, 'missingRequestsMem')
+    case 'missing-mem-limit':
+      return hasMissing(pod, 'missingLimitsMem')
+    case 'oom-risk':
+      return pod.oomRisk
+    case 'throttling-risk':
+      return pod.throttlingRisk
+    default:
+      return true
+  }
+}
+
+const filteredPods = computed(() => {
+  const term = search.value.trim().toLowerCase()
+  return (pods.value ?? []).filter((pod) => {
+    if (term && !pod.name.toLowerCase().includes(term)) return false
+    if (namespaceFilter.value && pod.namespace !== namespaceFilter.value) return false
+    return activeFilters.value.every((f) => matchesFilter(pod, f))
+  })
+})
+
+function clearFilters() {
+  search.value = ''
+  namespaceFilter.value = null
+  activeFilters.value = []
+}
+const filtersActive = computed(
+  () => search.value !== '' || namespaceFilter.value !== null || activeFilters.value.length > 0,
+)
+
+// --- grouping (namespace -> controller), stable order carried over from the
+// already-sorted backend payload (SPECS.md §2.2) ---
 
 interface Group {
   namespace: string
@@ -22,7 +136,7 @@ interface Group {
 
 const groups = computed<Group[]>(() => {
   const byKey = new Map<string, Group>()
-  for (const pod of pods.value ?? []) {
+  for (const pod of filteredPods.value) {
     const controllerLabel = pod.controller
       ? `${pod.controller.kind}/${pod.controller.name}`
       : 'Bare pod'
@@ -34,76 +148,158 @@ const groups = computed<Group[]>(() => {
       byKey.set(key, { namespace: pod.namespace, controllerKey: key, controllerLabel, pods: [pod] })
     }
   }
-  return [...byKey.values()].sort((a, b) => a.namespace.localeCompare(b.namespace))
+  return [...byKey.values()].sort(
+    (a, b) =>
+      a.namespace.localeCompare(b.namespace) || a.controllerLabel.localeCompare(b.controllerLabel),
+  )
 })
 
 function missingChips(pod: PodDTO): string[] {
   const chips = new Set<string>()
   for (const c of pod.containers) {
-    if (c.wildWest.missingRequestsCpu) chips.add('MISSING CPU REQUEST')
-    if (c.wildWest.missingRequestsMem) chips.add('MISSING MEM REQUEST')
-    if (c.wildWest.missingLimitsCpu) chips.add('MISSING CPU LIMIT')
-    if (c.wildWest.missingLimitsMem) chips.add('MISSING MEM LIMIT')
+    if (c.wildWest.missingRequestsCpu) chips.add('CPU request')
+    if (c.wildWest.missingRequestsMem) chips.add('Mem request')
+    if (c.wildWest.missingLimitsCpu) chips.add('CPU limit')
+    if (c.wildWest.missingLimitsMem) chips.add('Mem limit')
   }
   return [...chips]
 }
 
-function containerAllocation(
-  pod: PodDTO,
-  field: 'requestsCpu' | 'requestsMem' | 'limitsCpu' | 'limitsMem',
-) {
-  return pod.containers.reduce((sum, c) => sum + (c[field] ?? 0), 0)
-}
+// Keyed by "namespace/name", not array index, so refreshed SSE pushes (new
+// array identity every time, SPECS.md §2 data flow) never collapse a panel
+// the user had open (Vuetify's v-model tracks these values, not positions).
+const openPanels = ref<string[]>([])
 </script>
 
 <template>
-  <v-container fluid>
-    <div class="d-flex align-center mb-4 ga-2">
-      <v-btn icon="mdi-arrow-left" variant="text" @click="router.push({ name: 'dashboard' })" />
-      <h2 class="text-h6">{{ name }} drilldown</h2>
-      <v-chip size="small" :color="status === 'live' ? 'healthy' : 'warning'" variant="flat">{{
-        status
-      }}</v-chip>
+  <v-container fluid class="node-drilldown">
+    <div class="d-flex align-center mb-2 ga-2">
+      <v-btn
+        icon="mdi-arrow-left"
+        variant="text"
+        density="comfortable"
+        @click="router.push({ name: 'dashboard' })"
+      />
+      <div>
+        <h1 class="text-h6 mb-0">{{ name }}</h1>
+        <div class="text-caption text-medium-emphasis">
+          {{ node?.podCount ?? pods?.length ?? 0 }} pods
+          <template v-if="node">· {{ node.ready ? 'Ready' : 'Not Ready' }}</template>
+        </div>
+      </div>
+      <v-spacer />
+      <v-chip v-if="node" :color="nodeHealthColor(node.health)" size="small" variant="flat">
+        {{ node.health }}
+      </v-chip>
+      <v-chip size="small" :color="status === 'live' ? 'healthy' : 'warning'" variant="outlined">
+        {{ status }}
+      </v-chip>
     </div>
 
-    <v-card v-if="wildWestPods.length" class="mb-6" variant="outlined" color="wildwest">
-      <v-card-title class="text-wildwest"
-        >Misconfigured workloads (missing requests/limits)</v-card-title
-      >
-      <v-list>
-        <v-list-item v-for="pod in wildWestPods" :key="`${pod.namespace}/${pod.name}`">
-          <template #prepend>
-            <v-icon icon="mdi-alert" color="wildwest" />
-          </template>
-          <v-list-item-title>{{ pod.name }}</v-list-item-title>
-          <v-list-item-subtitle>Namespace: {{ pod.namespace }}</v-list-item-subtitle>
-          <template #append>
-            <v-chip
-              v-for="chip in missingChips(pod)"
-              :key="chip"
-              color="wildwest"
-              size="small"
-              variant="flat"
-              class="ml-1"
-            >
-              {{ chip }}
-            </v-chip>
-          </template>
-        </v-list-item>
-      </v-list>
+    <v-card class="mb-5" variant="flat" border>
+      <v-card-text>
+        <NodeDistributionChart
+          label="CPU"
+          :capacity="node?.capacityCpu ?? 0"
+          :request-segments="cpuRequestSegments"
+          :limit-segments="cpuLimitSegments"
+          :usage="cpuUsageTotal"
+          :format="formatCpu"
+        />
+        <NodeDistributionChart
+          label="Memory"
+          :capacity="node?.capacityMemory ?? 0"
+          :request-segments="memRequestSegments"
+          :limit-segments="memLimitSegments"
+          :usage="memUsageTotal"
+          :format="formatMem"
+        />
+      </v-card-text>
     </v-card>
 
-    <v-card v-for="group in groups" :key="group.controllerKey" class="mb-4">
-      <v-card-title>{{ group.namespace }} / {{ group.controllerLabel }}</v-card-title>
-      <v-expansion-panels variant="accordion">
-        <v-expansion-panel v-for="pod in group.pods" :key="pod.name">
+    <v-card class="mb-5" variant="flat" border>
+      <v-card-text class="d-flex flex-wrap align-center ga-3">
+        <v-text-field
+          v-model="search"
+          label="Search pod name"
+          prepend-inner-icon="mdi-magnify"
+          density="compact"
+          hide-details
+          clearable
+          style="max-width: 240px"
+        />
+        <v-select
+          v-model="namespaceFilter"
+          :items="namespaceOptions"
+          label="Namespace"
+          density="compact"
+          hide-details
+          clearable
+          style="max-width: 220px"
+        />
+        <v-chip-group v-model="activeFilters" multiple filter column>
+          <v-chip
+            v-for="opt in FILTER_OPTIONS"
+            :key="opt.value"
+            :value="opt.value"
+            size="small"
+            variant="outlined"
+          >
+            {{ opt.label }}
+          </v-chip>
+        </v-chip-group>
+        <v-spacer />
+        <span class="text-caption text-medium-emphasis"
+          >{{ filteredPods.length }} / {{ pods?.length ?? 0 }} pods</span
+        >
+        <v-btn v-if="filtersActive" size="small" variant="text" @click="clearFilters"
+          >Clear filters</v-btn
+        >
+      </v-card-text>
+    </v-card>
+
+    <v-alert v-if="!pods" type="info" variant="tonal" class="mb-4">Waiting for pod data…</v-alert>
+    <v-alert v-else-if="filteredPods.length === 0" type="info" variant="tonal" class="mb-4">
+      No pods match the current filters.
+    </v-alert>
+
+    <v-card v-for="group in groups" :key="group.controllerKey" class="mb-4" variant="flat" border>
+      <v-card-title class="text-body-1 d-flex align-center ga-2">
+        <v-icon icon="mdi-folder-outline" size="small" />
+        {{ group.namespace }}
+        <v-icon icon="mdi-chevron-right" size="small" class="text-medium-emphasis" />
+        {{ group.controllerLabel }}
+        <v-chip size="x-small" variant="tonal" class="ml-1">{{ group.pods.length }}</v-chip>
+      </v-card-title>
+      <v-divider />
+      <v-expansion-panels v-model="openPanels" multiple variant="accordion">
+        <v-expansion-panel v-for="pod in group.pods" :key="podKey(pod)" :value="podKey(pod)">
           <v-expansion-panel-title>
-            <span class="mr-2">{{ pod.name }}</span>
-            <v-chip v-if="pod.oomRisk" color="critical" size="small" class="mr-1">OOM-Risk</v-chip>
-            <v-chip v-if="pod.throttlingRisk" color="warning" size="small" class="mr-1"
-              >Throttling-Risk</v-chip
-            >
-            <v-chip v-if="pod.wildWest" color="wildwest" size="small">Wild-West</v-chip>
+            <div class="d-flex align-center ga-2 flex-wrap pod-title">
+              <v-icon
+                v-if="pod.wildWest"
+                icon="mdi-alert-circle"
+                color="wildwest"
+                size="small"
+                title="Missing resource configuration"
+              />
+              <span class="font-weight-medium">{{ pod.name }}</span>
+              <v-chip v-if="pod.oomRisk" color="critical" size="small" variant="flat"
+                >OOM-Risk</v-chip
+              >
+              <v-chip v-if="pod.throttlingRisk" color="warning" size="small" variant="flat"
+                >Throttling-Risk</v-chip
+              >
+              <v-chip
+                v-for="chip in missingChips(pod)"
+                :key="chip"
+                color="wildwest"
+                size="small"
+                variant="outlined"
+              >
+                Missing {{ chip }}
+              </v-chip>
+            </div>
           </v-expansion-panel-title>
           <v-expansion-panel-text>
             <DeltaBars
@@ -128,3 +324,9 @@ function containerAllocation(
     </v-card>
   </v-container>
 </template>
+
+<style scoped>
+.pod-title {
+  min-width: 0;
+}
+</style>

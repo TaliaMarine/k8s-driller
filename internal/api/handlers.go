@@ -42,13 +42,7 @@ func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNodePods(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	pods := s.watch.PodsOnNode(name)
-	dtos := make([]PodDTO, 0, len(pods))
-	for _, p := range pods {
-		dtos = append(dtos, s.buildPodDTO(p))
-	}
-	writeJSON(w, http.StatusOK, dtos)
+	writeJSON(w, http.StatusOK, s.buildNodePodDTOs(r.PathValue("name")))
 }
 
 func (s *Server) handlePodDetail(w http.ResponseWriter, r *http.Request) {

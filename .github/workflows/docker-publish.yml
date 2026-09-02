@@ -1,8 +1,8 @@
-name: Publish image
+name: Publish release
 
 # Fires on a real release tag (created by release-please, see release-please.yml)
-# so every published image corresponds to a real, versioned release — never an
-# arbitrary main-branch commit. workflow_dispatch exists for two reasons: (1)
+# so every published artifact corresponds to a real, versioned release — never
+# an arbitrary main-branch commit. workflow_dispatch exists for two reasons: (1)
 # release-please.yml chain-triggers it explicitly after creating a release,
 # since the default GITHUB_TOKEN it uses cannot itself trigger a tag-push
 # event; (2) it lets you manually (re-)publish an existing tag.
@@ -24,22 +24,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-push:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      major_minor: ${{ steps.version.outputs.major_minor }}
+      major: ${{ steps.version.outputs.major }}
+      image: ${{ steps.version.outputs.image }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Compute image tags
+      - name: Compute release version
         id: version
         env:
           RAW_TAG: ${{ inputs.tag || github.ref_name }}
@@ -62,12 +55,55 @@ jobs:
             echo "image=$image"
           } >> "$GITHUB_OUTPUT"
 
+  build-and-push:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: true
           tags: |
-            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
-            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.major_minor }}
-            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.major }}
-            ${{ steps.version.outputs.image }}:latest
+            ${{ needs.prepare.outputs.image }}:${{ needs.prepare.outputs.version }}
+            ${{ needs.prepare.outputs.image }}:${{ needs.prepare.outputs.major_minor }}
+            ${{ needs.prepare.outputs.image }}:${{ needs.prepare.outputs.major }}
+            ${{ needs.prepare.outputs.image }}:latest
+
+  publish-chart:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+
+      - name: Verify Chart.yaml version matches the release tag
+        run: |
+          set -euo pipefail
+          chart_version=$(yq -r '.version' charts/k8s-driller/Chart.yaml)
+          if [ "$chart_version" != "${{ needs.prepare.outputs.version }}" ]; then
+            echo "::error::Chart.yaml version ($chart_version) does not match release tag (${{ needs.prepare.outputs.version }})"
+            exit 1
+          fi
+
+      - name: Package and push chart
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm package charts/k8s-driller --destination /tmp
+          # Final chart location: oci://ghcr.io/<owner>/charts/k8s-driller:<version>
+          helm push "/tmp/k8s-driller-${{ needs.prepare.outputs.version }}.tgz" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"

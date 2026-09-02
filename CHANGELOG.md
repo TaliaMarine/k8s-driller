@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.0.0...v2.0.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* rename CRD group off the reserved driller.k8s.io suffix ([785ff5f](https://github.com/TaliaMarine/k8s-driller/commit/785ff5fa4f2053de69108d53c12ef502079f366b))
+
 ## [2.0.0](https://github.com/TaliaMarine/k8s-driller/compare/v1.0.0...v2.0.0) (2026-09-02)
 
 

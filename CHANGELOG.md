@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.1...v2.1.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* stable ordering, instant SSE snapshots, and a real node-drilldown UX pass ([dd4647d](https://github.com/TaliaMarine/k8s-driller/commit/dd4647d98870677d899f93a9d33d37fa8de9d1f1))
+
 ## [2.1.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.0...v2.1.1) (2026-09-02)
 
 

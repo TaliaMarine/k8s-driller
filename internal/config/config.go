@@ -27,14 +27,25 @@ type IntegrationsConfig struct {
 	OpenCostBaseURL string
 }
 
+// SecretRef names a Kubernetes Secret (in Config.Namespace) that
+// runtimesecrets.Ensure resolves at startup — either read as-is (an
+// operator-supplied Secret from their own secret manager) or created with a
+// fresh random value if AutoCreate is true and it doesn't exist yet
+// (SPECS.md §4.2).
+type SecretRef struct {
+	Name       string
+	Key        string
+	AutoCreate bool
+}
+
 // Config is every environment-derived setting the backend needs.
 type Config struct {
 	HTTPAddr  string
-	Namespace string // the app's own namespace, used to resolve webhook secretRefs
+	Namespace string // the app's own namespace: webhook secretRefs, and both SecretRefs below, resolve here
 
-	OIDC                OIDCConfig
-	AdminBootstrapToken string
-	SessionSigningKey   []byte
+	OIDC             OIDCConfig
+	AdminTokenSecret SecretRef
+	SessionKeySecret SecretRef
 
 	PrometheusEnabled bool
 	PrometheusBaseURL string
@@ -49,14 +60,13 @@ type Config struct {
 }
 
 // Load reads and validates configuration from the environment. Fields with
-// no sensible default (OIDC issuer/client, admin token, session signing key)
-// are required — a misconfigured deployment should fail fast at startup
-// rather than serve with broken auth.
+// no sensible default (OIDC issuer/client, the two secret names) are
+// required — a misconfigured deployment should fail fast at startup rather
+// than serve with broken auth.
 func Load() (*Config, error) {
 	cfg := &Config{
 		HTTPAddr:                    getEnv("DRILLER_HTTP_ADDR", ":8080"),
 		Namespace:                   getEnv("DRILLER_NAMESPACE", ""),
-		AdminBootstrapToken:         os.Getenv("DRILLER_ADMIN_TOKEN"),
 		PrometheusEnabled:           getEnvBool("DRILLER_PROMETHEUS_ENABLED", false),
 		PrometheusBaseURL:           os.Getenv("DRILLER_PROMETHEUS_BASE_URL"),
 		MetricsPollInterval:         getEnvDuration("DRILLER_METRICS_POLL_INTERVAL", 15*time.Second),
@@ -67,7 +77,16 @@ func Load() (*Config, error) {
 			ClientSecret: os.Getenv("DRILLER_OIDC_CLIENT_SECRET"),
 			RedirectURL:  os.Getenv("DRILLER_OIDC_REDIRECT_URL"),
 		},
-		SessionSigningKey: []byte(os.Getenv("DRILLER_SESSION_SIGNING_KEY")),
+		AdminTokenSecret: SecretRef{
+			Name:       os.Getenv("DRILLER_ADMIN_TOKEN_SECRET_NAME"),
+			Key:        getEnv("DRILLER_ADMIN_TOKEN_SECRET_KEY", "token"),
+			AutoCreate: getEnvBool("DRILLER_ADMIN_TOKEN_AUTO_CREATE", true),
+		},
+		SessionKeySecret: SecretRef{
+			Name:       os.Getenv("DRILLER_SESSION_KEY_SECRET_NAME"),
+			Key:        getEnv("DRILLER_SESSION_KEY_SECRET_KEY", "key"),
+			AutoCreate: getEnvBool("DRILLER_SESSION_KEY_AUTO_CREATE", true),
+		},
 		Integrations: IntegrationsConfig{
 			VPAEnabled:      getEnvBool("DRILLER_INTEGRATIONS_VPA_ENABLED", false),
 			OpenCostEnabled: getEnvBool("DRILLER_INTEGRATIONS_OPENCOST_ENABLED", false),
@@ -89,11 +108,11 @@ func Load() (*Config, error) {
 	if cfg.Namespace == "" {
 		missing = append(missing, "DRILLER_NAMESPACE")
 	}
-	if cfg.AdminBootstrapToken == "" {
-		missing = append(missing, "DRILLER_ADMIN_TOKEN")
+	if cfg.AdminTokenSecret.Name == "" {
+		missing = append(missing, "DRILLER_ADMIN_TOKEN_SECRET_NAME")
 	}
-	if len(cfg.SessionSigningKey) < 32 {
-		missing = append(missing, "DRILLER_SESSION_SIGNING_KEY (must be at least 32 bytes)")
+	if cfg.SessionKeySecret.Name == "" {
+		missing = append(missing, "DRILLER_SESSION_KEY_SECRET_NAME")
 	}
 	if cfg.OIDC.IssuerURL == "" {
 		missing = append(missing, "DRILLER_OIDC_ISSUER_URL")

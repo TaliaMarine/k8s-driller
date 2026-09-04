@@ -60,18 +60,30 @@ type Store struct {
 	pods    map[string]PodInfo       // key: namespace/name
 	rsOwner map[string]ControllerRef // key: namespace/replicaset -> owning Deployment
 
-	onChange OnChangeFunc
-	factory  informers.SharedInformerFactory
+	onChange      OnChangeFunc
+	debounce      time.Duration
+	debounceMu    sync.Mutex
+	debounceTimer *time.Timer
+	factory       informers.SharedInformerFactory
 }
 
 // New builds a Store and registers informer event handlers. Call Start to
 // begin watching.
-func New(clientset kubernetes.Interface, resync time.Duration, onChange OnChangeFunc) *Store {
+//
+// debounce coalesces onChange calls: a burst of informer events (e.g. a
+// few-hundred-pod rollout) triggers exactly one onChange, debounce after the
+// last event, instead of one per event. Without this, every single pod
+// add/update/delete triggered a full Recompute (internal/api/push.go),
+// which itself spawns an alert-evaluation pass — on a cluster with heavy
+// churn this produced an unbounded burst of concurrent work. Pass 0 to
+// disable coalescing and call onChange synchronously, as before.
+func New(clientset kubernetes.Interface, resync time.Duration, debounce time.Duration, onChange OnChangeFunc) *Store {
 	s := &Store{
 		nodes:    make(map[string]NodeInfo),
 		pods:     make(map[string]PodInfo),
 		rsOwner:  make(map[string]ControllerRef),
 		onChange: onChange,
+		debounce: debounce,
 		factory:  informers.NewSharedInformerFactory(clientset, resync),
 	}
 
@@ -100,9 +112,19 @@ func New(clientset kubernetes.Interface, resync time.Duration, onChange OnChange
 }
 
 func (s *Store) notify(reason string) {
-	if s.onChange != nil {
-		s.onChange(reason)
+	if s.onChange == nil {
+		return
 	}
+	if s.debounce <= 0 {
+		s.onChange(reason)
+		return
+	}
+	s.debounceMu.Lock()
+	defer s.debounceMu.Unlock()
+	if s.debounceTimer != nil {
+		s.debounceTimer.Stop()
+	}
+	s.debounceTimer = time.AfterFunc(s.debounce, func() { s.onChange(reason) })
 }
 
 // Start begins the informer factory and blocks until stopCh is closed or the

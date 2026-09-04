@@ -63,25 +63,45 @@ jobs:
       - name: Enforce the read-only RBAC guarantee (SPECS.md §4.2/§8.2)
         run: |
           set -euo pipefail
-          allowed_resources="drilleruserroles drilleralertconfigs secrets"
-          allowed_verbs="get list watch"
-          violation=0
-          while IFS= read -r rule; do
-            for resource in $(echo "$rule" | jq -r '.resources[]'); do
-              case " $allowed_resources " in *" $resource "*) continue ;; esac
-              for verb in $(echo "$rule" | jq -r '.verbs[]'); do
-                case " $allowed_verbs " in
-                  *" $verb "*) ;;
-                  *)
-                    echo "::error::disallowed verb '$verb' on resource '$resource'"
-                    violation=1
-                    ;;
+          # drilleruserroles/drilleralertconfigs: the app's own CRDs, any verb allowed.
+          # secrets: get always, create only as the one documented exception
+          # (SPECS.md §4.2) — never update/patch/delete. Everything else: get/list/watch only.
+          check_rbac() {
+            local render="$1" allow_secrets_create="$2"
+            local violation=0
+            while IFS= read -r rule; do
+              for resource in $(echo "$rule" | jq -r '.resources[]'); do
+                case "$resource" in
+                  drilleruserroles|drilleralertconfigs) continue ;;
                 esac
+                allowed_verbs="get list watch"
+                if [ "$resource" = "secrets" ] && [ "$allow_secrets_create" = "true" ]; then
+                  allowed_verbs="get create"
+                elif [ "$resource" = "secrets" ]; then
+                  allowed_verbs="get"
+                fi
+                for verb in $(echo "$rule" | jq -r '.verbs[]'); do
+                  case " $allowed_verbs " in
+                    *" $verb "*) ;;
+                    *)
+                      echo "::error::disallowed verb '$verb' on resource '$resource'"
+                      violation=1
+                      ;;
+                  esac
+                done
               done
-            done
-          done < <(helm template charts/k8s-driller --set integrations.vpa.enabled=true \
-            | yq -N 'select(.kind == "ClusterRole" or .kind == "Role") | .rules[]' -o json \
-            | jq -c '.')
+            done < <(echo "$render" | yq -N 'select(.kind == "ClusterRole" or .kind == "Role") | .rules[]' -o json | jq -c '.')
+            return "$violation"
+          }
+
+          default_render=$(helm template charts/k8s-driller --set integrations.vpa.enabled=true)
+          optout_render=$(helm template charts/k8s-driller \
+            --set sessionSigningKey.autoGenerate=false --set sessionSigningKey.secretRef.name=x \
+            --set adminBootstrapToken.autoGenerate=false --set adminBootstrapToken.secretRef.name=y)
+
+          violation=0
+          check_rbac "$default_render" true || violation=1
+          check_rbac "$optout_render" false || violation=1
           exit "$violation"
 
   docker:

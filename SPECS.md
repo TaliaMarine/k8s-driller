@@ -134,10 +134,10 @@ release name: `k8s-driller`.
 - **Auth module**:
   - OIDC login (Authorization Code + PKCE) → on first login, a user gets an implicit `viewer` role unless a
     `DrillerUserRole` already exists for their subject.
-  - A separate **admin bootstrap token** (random value in a Secret, mounted/env, rotatable by redeploying)
-    grants a one-time-use-per-session "break glass" admin API scope, used solely to promote the first
-    real admin user(s) via the Role Management screen. Once at least one OIDC user holds `admin`, routine
-    role changes happen through that UI/API, not the token.
+  - A separate **admin bootstrap token** (random value in a Secret, resolved by the app itself at startup —
+    see §4.2 — not mounted via `secretKeyRef`) grants a one-time-use-per-session "break glass" admin API
+    scope, used solely to promote the first real admin user(s) via the Role Management screen. Once at
+    least one OIDC user holds `admin`, routine role changes happen through that UI/API, not the token.
   - Session cookies are signed, `HttpOnly`, `Secure`, `SameSite=Lax`.
 - **SSE hub** — one broadcast channel per logical topic (`cluster`, `node:<name>`, `alerts`); clients
   subscribe to the topics their current view needs; hub fans out JSON-patch-style diffs, with an initial
@@ -150,10 +150,25 @@ release name: `k8s-driller`.
 
 ### 4.2 Read-only guarantee
 
-The backend's ServiceAccount is granted **only** `get`/`list`/`watch` verbs (see §8.2 RBAC). There is no
-code path in the backend that issues a `create`/`update`/`patch`/`delete` against workload or node
-resources. This is enforced both by RBAC (defense in depth) and by simply not implementing those client
-calls.
+The backend's ServiceAccount is granted **only** `get`/`list`/`watch` verbs on cluster/workload resources
+(see §8.2 RBAC). There is no code path in the backend that issues a `create`/`update`/`patch`/`delete`
+against a node, pod, or workload controller. This is enforced both by RBAC (defense in depth) and by simply
+not implementing those client calls.
+
+**One explicit, documented exception:** the app owns two runtime Secrets in its own namespace — the
+session-signing key and the admin bootstrap token (§4.1) — and is granted `create` on `secrets` (namespace-
+scoped, not cluster-wide) to generate them itself if they don't already exist, gated per-secret by
+`autoGenerate` in `values.yaml` (§8.4; both default `true`; RBAC drops the `create` verb entirely when
+both are `false`, see §8.2). This replaced an earlier chart-side design that generated these with Helm's
+`randAlphaNum` plus a `lookup`-based "preserve across upgrades" trick — that isn't GitOps-safe: `lookup`
+evaluates empty under `helm template` (what ArgoCD, Flux, and any dry-run tooling actually render), so every
+such render minted a fresh random Secret, and a GitOps controller with self-heal enabled reapplied that
+fresh value on every reconcile — silently rotating the admin bootstrap token and invalidating every signed
+session cookie on a live deployment. `create` can't be scoped to specific resource names in Kubernetes RBAC
+(the object doesn't exist yet at authorization time), so this is "may create any Secret in its own
+namespace" — the narrowest expression available, not name-restricted. Operators who'd rather keep the app
+fully read-only can set `autoGenerate: false` on both and supply the Secrets themselves (Vault, SOPS,
+External Secrets Operator, etc.) — see §8.4.
 
 ## 5. Data Model (CRDs)
 
@@ -288,8 +303,6 @@ charts/k8s-driller/
     serviceaccount.yaml
     clusterrole.yaml
     clusterrolebinding.yaml
-    secret-admin-token.yaml       # auto-generated (value preserved across upgrades via `lookup`) unless secretRef given
-    secret-session-key.yaml       # same auto-generate-or-reference pattern, for signed session cookies
     ingress.yaml                  # rendered only if .Values.ingress.type == nginx
     httproute.yaml                # rendered only if .Values.ingress.type == gateway-api
     poddisruptionbudget.yaml      # optional
@@ -303,9 +316,10 @@ CRDs live in the chart's top-level `crds/` directory rather than under `template
 CRDs: installed before every other template, never templated, and never modified on `helm upgrade` (avoids Helm
 silently clobbering a CRD another tool also manages).
 
-### 8.2 RBAC (ClusterRole, read-only)
+### 8.2 RBAC (ClusterRole, read-only + one documented, opt-out exception)
 
 ```yaml
+# ClusterRole
 rules:
   - apiGroups: [""]
     resources: ["nodes", "pods", "namespaces"]
@@ -319,10 +333,18 @@ rules:
   - apiGroups: ["driller.dev"]
     resources: ["drilleruserroles", "drilleralertconfigs"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]   # own CRDs only
+
+# namespaced Role, bound only in the app's own namespace
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]                # always: webhook secretRefs (§5.2), reading back its own runtime secrets
+    # + "create" only when sessionSigningKey.autoGenerate or adminBootstrapToken.autoGenerate is true (both
+    # default true) — see §4.2 for why this exists and how to opt out.
 ```
 
 No verbs are ever granted on workloads beyond read — this list is the enforcement point backing the
-read-only guarantee in §4.2.
+read-only guarantee in §4.2, aside from the single documented `secrets: create` exception above.
 
 ### 8.3 Ingress genericness
 
@@ -358,7 +380,11 @@ oidc:
   clientSecretRef: {name: "", key: ""}
   redirectUrl: ""
 adminBootstrapToken:
-  autoGenerate: true      # if false, must supply via secretRef
+  autoGenerate: true      # if false, the app requires secretRef to already exist — see §4.2
+  secretRef: {name: "", key: "token"}
+sessionSigningKey:
+  autoGenerate: true      # same pattern, for the signed-session-cookie key
+  secretRef: {name: "", key: "key"}
 prometheus:
   enabled: false
   baseUrl: ""             # e.g. http://prometheus-server.monitoring:9090

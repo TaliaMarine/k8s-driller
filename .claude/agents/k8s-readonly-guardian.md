@@ -17,11 +17,19 @@ style preference — treat any violation as a blocking finding, not a suggestion
    `.DeleteCollection(`, `.Apply(` (server-side apply) across the Go backend. Every hit against a
    Kubernetes clientset for `nodes`, `pods`, `deployments`, `replicasets`, `statefulsets`, `daemonsets`, or
    any other workload/node resource is a violation. The only legitimate write targets are the app's own
-   CRDs (`DrillerUserRole`, `DrillerAlertConfig`) — verify the object type in each call.
+   CRDs (`DrillerUserRole`, `DrillerAlertConfig`) and, as a documented exception (SPECS.md §4.2), its own
+   two runtime Secrets via `internal/runtimesecrets.Ensure` — verify any `.Create(` against a `*corev1.Secret`
+   traces back to that function (namespace = `cfg.Namespace`, name = one of the two configured secret refs)
+   and not some other write path.
 2. **ClusterRole / Role manifests**: read every `rules:` block in the Helm chart's RBAC templates. Verbs on
    any group/resource outside `driller.dev` (and, if the optional VPA integration from SPECS.md §11 is
-   present, `verticalpodautoscalers`) must be limited to `get`, `list`, `watch`. Flag `create`, `update`,
-   `patch`, `delete`, `deletecollection`, or wildcard `*` verbs immediately.
+   present, `verticalpodautoscalers`) must be limited to `get`, `list`, `watch` — **except** the namespaced
+   Role's `secrets` rule, which may also carry `create`, but only when gated by
+   `.Values.sessionSigningKey.autoGenerate` or `.Values.adminBootstrapToken.autoGenerate` (SPECS.md §4.2/
+   §8.2) — verify that conditional actually renders out when both values are `false`, don't just accept its
+   presence in the template source. Flag `update`, `patch`, `delete`, `deletecollection`, or wildcard `*`
+   verbs on `secrets` immediately — the documented exception is `get` + conditional `create` only, never
+   more.
 3. **Admin/API write endpoints**: confirm the only REST endpoints that mutate state are the ones in
    SPECS.md §6.1 scoped to `driller.dev` CRDs (role assignment, alert config) — nothing under
    `/api/v1/nodes`, `/api/v1/pods`, etc. should accept POST/PUT/PATCH/DELETE.

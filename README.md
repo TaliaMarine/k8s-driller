@@ -94,8 +94,10 @@ helm install driller ./charts/k8s-driller \
   --set ingress.host=driller.example.com
 ```
 
-The admin bootstrap token and session signing key are auto-generated as Secrets on first install (and
-preserved across upgrades). Fetch the bootstrap token to promote your first admin:
+The app generates the admin bootstrap token and session signing key itself on first startup (as Secrets in
+its own namespace) if they don't already exist, and reuses them on every restart — not the chart, and not
+via `helm upgrade`/`lookup`, which isn't deterministic under `helm template` (see SPECS.md §4.2). Fetch the
+bootstrap token to promote your first admin:
 
 ```sh
 kubectl -n driller get secret driller-admin-token -o jsonpath='{.data.token}' | base64 -d
@@ -182,7 +184,14 @@ frontend/                Vue 3 + Vuetify 4 SPA
 The backend's ServiceAccount is granted only `get`/`list`/`watch` on cluster resources — see
 [`charts/k8s-driller/templates/clusterrole.yaml`](./charts/k8s-driller/templates/clusterrole.yaml). There is
 no code path anywhere in this repo that creates, updates, patches, or deletes a workload or node. Webhook
-URLs are referenced by Secret, never stored inline. See SPECS.md §4.2/§8.2/§10 for the full rationale.
+URLs are referenced by Secret, never stored inline.
+
+One documented, opt-out exception: the app may `create` its own two runtime Secrets (session signing key,
+admin bootstrap token) in its own namespace, gated by `autoGenerate` in `values.yaml` (default `true` for
+both). Set both to `false` and supply the Secrets yourself (Vault, SOPS, External Secrets Operator, etc.)
+to drop that verb entirely and keep the app fully read-only. See SPECS.md §4.2/§8.2/§10 for the full
+rationale, including why this replaced an earlier chart-side `randAlphaNum`+`lookup` approach that wasn't
+safe under GitOps tooling.
 
 ## License
 

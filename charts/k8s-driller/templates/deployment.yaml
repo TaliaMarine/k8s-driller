@@ -42,16 +42,29 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: DRILLER_ADMIN_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "k8s-driller.adminTokenSecretName" . }}
-                  key: {{ .Values.adminBootstrapToken.secretRef.key | default "token" }}
-            - name: DRILLER_SESSION_SIGNING_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "k8s-driller.sessionKeySecretName" . }}
-                  key: {{ .Values.sessionSigningKey.secretRef.key | default "key" }}
+            {{- /*
+            The app resolves these two Secrets itself at startup (get, or
+            create if missing and auto-create is enabled) rather than the
+            chart minting them with randAlphaNum+lookup — that combination
+            isn't GitOps-safe: `lookup` evaluates empty under `helm
+            template` (what ArgoCD/Flux/dry-run tooling actually render),
+            so every render used to mint a fresh random Secret, and
+            self-heal reapplied it on every reconcile. See SPECS.md §4.2.
+            These are plain, deterministic strings — no secretKeyRef, no
+            chicken-and-egg with a Secret that may not exist yet.
+            */}}
+            - name: DRILLER_ADMIN_TOKEN_SECRET_NAME
+              value: {{ include "k8s-driller.adminTokenSecretName" . }}
+            - name: DRILLER_ADMIN_TOKEN_SECRET_KEY
+              value: {{ .Values.adminBootstrapToken.secretRef.key | default "token" }}
+            - name: DRILLER_ADMIN_TOKEN_AUTO_CREATE
+              value: {{ .Values.adminBootstrapToken.autoGenerate | quote }}
+            - name: DRILLER_SESSION_KEY_SECRET_NAME
+              value: {{ include "k8s-driller.sessionKeySecretName" . }}
+            - name: DRILLER_SESSION_KEY_SECRET_KEY
+              value: {{ .Values.sessionSigningKey.secretRef.key | default "key" }}
+            - name: DRILLER_SESSION_KEY_AUTO_CREATE
+              value: {{ .Values.sessionSigningKey.autoGenerate | quote }}
             - name: DRILLER_OIDC_ISSUER_URL
               value: {{ .Values.oidc.issuerUrl | quote }}
             - name: DRILLER_OIDC_CLIENT_ID

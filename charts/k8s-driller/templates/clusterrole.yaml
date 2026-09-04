@@ -1,7 +1,9 @@
 {{- /*
 Read-only guarantee (SPECS.md §4.2/§8.2): no verb below workload/node
-resources is ever anything but get/list/watch. The only write verbs granted
-anywhere in this file are scoped to the app's own driller.dev CRDs.
+resources is ever anything but get/list/watch. The write verbs granted
+anywhere in this file are scoped to either the app's own driller.dev CRDs,
+or — see the namespaced Role below — its own two runtime Secrets, both
+explicit, documented exceptions (SPECS.md §4.2).
 */ -}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -31,12 +33,34 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "k8s-driller.fullname" . }}-secrets-reader
+  name: {{ include "k8s-driller.fullname" . }}-secrets-manager
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "k8s-driller.labels" . | nindent 4 }}
 rules:
-  {{- /* Needed only to resolve DrillerAlertConfig webhook secretRefs (SPECS.md §5.2) — namespace-scoped, read-only. */}}
+  {{- /*
+  get: always needed, for two purposes — resolving DrillerAlertConfig
+  webhook secretRefs (SPECS.md §5.2), and reading back its own
+  session-key/admin-token Secrets (see below) once they exist.
+
+  create: only granted when at least one of the two runtime secrets is set
+  to auto-generate (values.yaml sessionSigningKey.autoGenerate /
+  adminBootstrapToken.autoGenerate — both default true). Kubernetes RBAC
+  can't scope `create` to specific resource names (the object doesn't exist
+  yet at authorization time), so this is "may create any Secret in its own
+  namespace," not name-restricted — the narrowest RBAC can express here.
+  Set both to false (bring your own Secret from Vault/SOPS/ESO/etc.) to
+  drop this verb entirely and keep the Role pure-read. This is the one
+  documented exception to the read-only guarantee in SPECS.md §4.2 — it
+  exists so the chart's rendered manifests are fully deterministic under
+  `helm template` (ArgoCD/Flux/dry-run), instead of the old
+  randAlphaNum+lookup approach, which minted a new random Secret on every
+  such render.
+  */}}
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get"]
+    verbs:
+      - get
+      {{- if or .Values.sessionSigningKey.autoGenerate .Values.adminBootstrapToken.autoGenerate }}
+      - create
+      {{- end }}

@@ -1,7 +1,5 @@
 package api
 
-import "context"
-
 // Recompute rebuilds the cluster/node view and pushes it to every SSE
 // subscriber. Called after any informer event and on every metrics poll
 // tick (SPECS.md §2 data flow). Each push is a full recomputed snapshot
@@ -26,5 +24,13 @@ func (s *Server) Recompute(reason string) {
 		allPods = append(allPods, dtos...)
 	}
 
-	go s.evaluateAlerts(context.Background(), summary, allPods)
+	// Non-blocking: StartAlertWorker's single goroutine serializes actual
+	// evaluation, so a burst of recomputes here can queue at most one
+	// pending item — anything beyond that is dropped, since the item
+	// already queued will re-evaluate against equally fresh state by the
+	// time the worker gets to it.
+	select {
+	case s.alertWork <- alertWorkItem{summary: summary, pods: allPods}:
+	default:
+	}
 }

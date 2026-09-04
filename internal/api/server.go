@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -35,6 +36,21 @@ type Server struct {
 	adminBootstrapToken    string
 	recommendationLookback int // hours
 	log                    *slog.Logger
+
+	// alertWork feeds the single background worker started by
+	// StartAlertWorker. Depth 1, and Recompute's send is non-blocking (see
+	// push.go): a burst of recomputes should evaluate alerts at most once
+	// more after the worker's current pass finishes, never queue up one
+	// evaluation per recompute. That bound is what stops the unbounded
+	// per-event goroutine growth that contributed to an OOMKill in
+	// production — each pending evaluation held a full ClusterSummaryDTO
+	// plus every PodDTO.
+	alertWork chan alertWorkItem
+}
+
+type alertWorkItem struct {
+	summary ClusterSummaryDTO
+	pods    []PodDTO
 }
 
 type Deps struct {
@@ -66,7 +82,25 @@ func NewServer(d Deps) *Server {
 		adminBootstrapToken:    d.AdminBootstrapToken,
 		recommendationLookback: d.RecommendationLookbackHours,
 		log:                    d.Log,
+		alertWork:              make(chan alertWorkItem, 1),
 	}
+}
+
+// StartAlertWorker runs the single goroutine that evaluates alerts,
+// serializing every request from Recompute so evaluation work can never
+// grow unbounded under a burst of recomputes (see the alertWork field
+// comment). Call once at startup.
+func (s *Server) StartAlertWorker(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case item := <-s.alertWork:
+				s.evaluateAlerts(ctx, item.summary, item.pods)
+			}
+		}
+	}()
 }
 
 // Routes builds the HTTP router (SPECS.md §6). Uses Go's net/http

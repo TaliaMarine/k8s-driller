@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.3...v2.2.0) (2026-09-04)
+
+
+### Features
+
+* support oidc.clientIdRef, so client ID can come from a Secret too ([fd6b98c](https://github.com/TaliaMarine/k8s-driller/commit/fd6b98cfcb3fc801ff8052af2373e96676616855))
+
 ## [2.1.3](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.2...v2.1.3) (2026-09-04)
 
 

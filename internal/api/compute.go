@@ -139,6 +139,20 @@ func (s *Server) buildNodePodDTOs(nodeName string) []PodDTO {
 	return dtos
 }
 
+// buildAllPodDTOs returns every active pod across every node, sorted node
+// by node (each buildNodePodDTOs call is already namespace/name-sorted
+// within it) — the Workloads view's cluster-wide counterpart to
+// buildNodePodDTOs.
+func (s *Server) buildAllPodDTOs() []PodDTO {
+	nodes := s.watch.Nodes()
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
+	out := make([]PodDTO, 0)
+	for _, n := range nodes {
+		out = append(out, s.buildNodePodDTOs(n.Name)...)
+	}
+	return out
+}
+
 func (s *Server) buildClusterSummary() ClusterSummaryDTO {
 	nodes := s.watch.Nodes()
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })

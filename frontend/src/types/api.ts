@@ -81,6 +81,48 @@ export interface RecommendationDTO {
   wasteful: boolean
 }
 
+export interface Sample {
+  t: string
+  v: number
+}
+
+export interface Stats {
+  mean: number
+  median: number
+  min: number
+  max: number
+  p90: number
+  p95: number
+  p99: number
+  stddev: number
+  cv: number
+}
+
+export interface Recommendation {
+  recommendedRequest: number
+  recommendedLimit: number
+  rationale: string
+}
+
+export interface PodAnalysisDTO {
+  rangeStart: string
+  rangeEnd: string
+  requestedDays: number
+  availableDays: number
+  cpuSamples: Sample[]
+  memSamples: Sample[]
+  cpuStats: Stats
+  memStats: Stats
+  currentRequestCpu?: number
+  currentLimitCpu?: number
+  currentRequestMem?: number
+  currentLimitMem?: number
+  cpuRecommendation: Recommendation
+  memRecommendation: Recommendation
+  wasteful: boolean
+  underProvisioned: boolean
+}
+
 export type Role = 'admin' | 'viewer'
 
 export interface CurrentUser {

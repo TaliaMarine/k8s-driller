@@ -225,8 +225,10 @@ All endpoints under `/api/v1`, JSON, session-cookie authenticated (except `/heal
 | GET | `/api/v1/cluster/summary` | viewer | Cluster totals snapshot (CPU/Mem alloc vs live) |
 | GET | `/api/v1/nodes` | viewer | List nodes with computed pressure state |
 | GET | `/api/v1/nodes/{name}/pods` | viewer | Pods scheduled on a node, grouped by namespace/controller |
+| GET | `/api/v1/pods` | viewer | All active pods across every node, for the cluster-wide Workloads view |
 | GET | `/api/v1/pods/{namespace}/{name}` | viewer | Pod detail: usage/request/limit triple, pressure tags |
-| GET | `/api/v1/pods/{namespace}/{name}/recommendation` | viewer | Prometheus-derived recommended request/limit (404 if Prometheus unconfigured or insufficient history) |
+| GET | `/api/v1/pods/{namespace}/{name}/recommendation` | viewer | Simple Prometheus-derived recommendation: `p95` usage over a fixed lookback (default 24h) plus a flat headroom (404 if Prometheus unconfigured or insufficient history) |
+| GET | `/api/v1/pods/{namespace}/{name}/analysis` | viewer | Analysis tab payload: up to 30 days of raw usage samples, summary statistics, and the CV-weighted/peak-bucketed recommendation (§9.1) (404 if Prometheus unconfigured or no history) |
 | GET | `/api/v1/history/nodes/{name}` | viewer | Historical trend series for charts (Prometheus-backed) |
 | GET | `/api/v1/auth/me` | any authenticated | Current user, role, session expiry |
 | POST | `/api/v1/auth/login` \| `/callback` | public | OIDC flow |
@@ -243,6 +245,7 @@ All endpoints under `/api/v1`, JSON, session-cookie authenticated (except `/heal
 |---|---|---|
 | `/api/v1/stream/cluster` | Cluster + all-nodes summary | Full snapshot on connect, then incremental patches |
 | `/api/v1/stream/nodes/{name}` | One node's pods/pressure | Snapshot + patches, used by the drilldown view |
+| `/api/v1/stream/workloads` | All pods across every node | Snapshot + patches, used by the cluster-wide Workloads view |
 | `/api/v1/stream/alerts` | Fired alerts (for an in-app toast/notification feed) | Event per alert fired |
 
 Event format: standard SSE `event:` + `data:` (JSON), with `event: snapshot` on connect and
@@ -252,21 +255,46 @@ Event format: standard SSE `event:` + `data:` (JSON), with `event: snapshot` on 
 
 ### 7.1 Views
 
-1. **Cluster Dashboard** (`/`) — header (cluster name, connection/live indicator, theme toggle), cluster
-   totals bar, responsive grid of Node Cards. Node card size/saturation scales with pressure; dual layered
-   progress bars (allocation layer + live-usage overlay layer); overcommit banner when applicable.
+The app bar's left side holds two section tabs — **Nodes** and **Workloads** — deciding which of the two
+cluster views is shown first; the app title sits centered regardless of which admin-only buttons or user
+menu items appear on the right, so it doesn't visually drift depending on role.
+
+1. **Cluster Dashboard** (`/`, "Nodes" tab) — header (cluster name, connection/live indicator, theme
+   toggle), cluster totals bar, responsive grid of Node Cards. Node card size/saturation scales with
+   pressure; dual layered progress bars (allocation layer + live-usage overlay layer); overcommit banner
+   when applicable; a pod count plus how many of those pods currently run over their request.
 2. **Node Drilldown** (`/nodes/:name`) — entered via card click with a shared-element/morph transition
    (not a hard route reload) so the node card visually expands into the detail header. Two sections:
    - "Wild West" list — pods missing request/limit, chips per missing dimension.
-   - Workload list grouped by namespace → controller (Deployment/StatefulSet/DaemonSet/bare Pod), each row
-     expandable to the Delta Visualizer (three-way usage/request/limit bars) and pressure-state chips
-     (OOM-Risk / Throttling-Risk / Wasteful), plus a "Recommended" bar when Prometheus data is available.
-3. **Role Management** (`/admin/users`, admin-only) — table of OIDC users with role dropdown; the
+   - Workload list grouped by namespace → controller (Deployment/StatefulSet/DaemonSet/bare Pod), filterable
+     by name, namespace, and misconfiguration/pressure state via a dropdown multi-select (kept out of the
+     main row once the filter set grew past what fits on one line). Each row shows tiny per-resource
+     usage/request ratio bars even when collapsed, and expands into the Pod Detail Panel (§7.1.1).
+3. **Workloads** (`/workloads`, "Workloads" tab) — the same namespace → controller grouped, filterable pod
+   list as the Node Drilldown, but cluster-wide across every node at once instead of scoped to one. Each row
+   additionally has a right-aligned button to jump to the node it's scheduled on.
+4. **Role Management** (`/admin/users`, admin-only) — table of OIDC users with role dropdown; the
    first-ever admin promotion flow (using the bootstrap token) is a distinct, clearly-labeled one-time
    screen, not mixed into routine role editing.
-4. **Alert Settings** (`/admin/alerts`, admin-only) — threshold sliders, webhook URL management (write-only
+5. **Alert Settings** (`/admin/alerts`, admin-only) — threshold sliders, webhook URL management (write-only
    once saved — displayed masked), "send test alert" button.
-5. **Login** (`/login`) — OIDC provider button(s); no local username/password.
+6. **Login** (`/login`) — OIDC provider button(s); no local username/password.
+
+#### 7.1.1 Pod Detail Panel
+
+Shown inside an expanded pod row on both the Node Drilldown and Workloads views (one shared component, so
+the two never drift apart). Left-side vertical tabs:
+
+- **Charts** — the Delta Visualizer (three-way usage/request/limit bars) and pressure-state chips
+  (OOM-Risk / Throttling-Risk).
+- **Analysis** — not fetched until an explicit "Analyse" button is clicked, since it drives a Prometheus
+  range query over up to 30 days per pod rather than the always-on live path. Once run, shows: a usage
+  history chart per resource (with dashed request/limit reference lines); a stats table (avg/median/min/max/
+  p90 against the current request/limit); the derived recommendation with a plain-language rationale (§9.1);
+  Wasteful/Under-provisioned chips; and an "Export raw data for AI" button that downloads the fetched
+  analysis (raw samples, stats, and recommendation) plus the pod's spec and a short description of the app
+  as a JSON file, so a user can feed it to a local AI assistant without that assistant ever touching the
+  cluster itself.
 
 ### 7.2 Visual language
 
@@ -440,6 +468,41 @@ exactly when it matters most — a burst of pods being scheduled at once. (`inte
 
 All constants above are Helm-configurable (§8.4), not hardcoded, since "sensible defaults" vary by
 workload profile across clusters.
+
+### 9.1 Analysis tab recommendation (extended algorithm)
+
+The `/recommendation` endpoint above (§6.1) is deliberately simple. The Analysis tab's `/analysis` endpoint
+(`internal/analysis`) uses a more deliberate approach modeled on the Kubernetes Vertical Pod Autoscaler
+recommender (kubernetes/autoscaler, vertical-pod-autoscaler/pkg/recommender): target a high usage
+percentile rather than the mean, and — for memory specifically — recommend off the peak usage within each
+aggregation interval rather than continuous samples. VPA maintains a continuously decayed histogram; this
+endpoint instead recomputes from a Prometheus range query fetched on demand (up to 30 days, capped so the
+query can't fan out unbounded), so it trades VPA's exponential decay for a coefficient-of-variation-weighted
+blend of mean and p90:
+
+- **Stats** (`analysis.Compute`) — mean, median, min, max, p90/p95/p99, standard deviation, and the
+  coefficient of variation `CV = stddev / mean` (0 = perfectly flat; above ~0.5 = bursty or bimodal, e.g.
+  long idle stretches plus real active periods).
+- **Request target** = `mean + weight × (p90 - mean)`, where `weight = clamp(CV × 2, 0, 1)`. A flat series
+  (CV≈0) recommends close to the mean; a bursty/bimodal one leans toward p90 instead of being dragged down
+  by idle troughs — "lean toward the higher ground, not just the average" is a direct consequence of this
+  formula, not a special case. The configured `recommendationHeadroomPct` floor is then added on top (1.5×
+  that floor for memory, since under-provisioning it risks an OOM-kill — unrecoverable — where CPU
+  under-provisioning only causes recoverable throttling).
+- **Memory uses peak-bucketed stats, not raw samples**: usage is first collapsed to one value per bucket
+  (24h normally, 1h when there's under 2 days of history) — the maximum observed within it — before the
+  Stats/target math above runs. Continuous memory samples would dilute a real active-period plateau with
+  idle troughs; VPA solves the same problem by building its memory histogram from one peak sample per
+  aggregation interval instead of continuous usage. CPU is not peak-bucketed — it's compressible and
+  naturally noisy, so a percentile of continuous samples already captures burstiness (VPA doesn't
+  peak-bucket CPU either).
+- **Limit** = `request × limitMultiplier`, raised if needed to cover the single worst observed value — p99
+  (×1.05) for CPU, the raw peak (×1.05) for memory — so a rare sharp burst or the one worst day still fits
+  under the limit even if the multiplier alone wouldn't cover it.
+- Recommendations are floored at 1 (millicore or byte) whenever the true target is positive but sub-1,
+  rather than truncating to a misleading "0" for a near-idle container.
+- Every recommendation carries a plain-language `rationale` string naming the CV and which end of the
+  mean/p90 blend it landed near, so the number is explainable rather than a black box.
 
 ## 10. Non-Functional Requirements
 

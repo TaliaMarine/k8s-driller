@@ -80,6 +80,28 @@ func (c *Client) scalarQuery(ctx context.Context, query string) (int64, bool, er
 	return int64(vector[0].Value), true, nil
 }
 
+// PodCPUUsageRange returns the pod's combined-container CPU usage series in
+// millicores over [start, end], for the Analysis tab's historical stats and
+// recommendations (SPECS.md §9 recommendation logic, extended with the
+// internal/analysis package).
+func (c *Client) PodCPUUsageRange(ctx context.Context, namespace, pod string, start, end time.Time, step time.Duration) ([]Sample, error) {
+	query := fmt.Sprintf(
+		`sum(rate(container_cpu_usage_seconds_total{namespace=%q,pod=%q,container!="",container!="POD"}[5m])) * 1000`,
+		namespace, pod,
+	)
+	return c.QueryRange(ctx, query, start, end, step)
+}
+
+// PodMemoryUsageRange returns the pod's combined-container working-set
+// memory usage series in bytes over [start, end].
+func (c *Client) PodMemoryUsageRange(ctx context.Context, namespace, pod string, start, end time.Time, step time.Duration) ([]Sample, error) {
+	query := fmt.Sprintf(
+		`sum(container_memory_working_set_bytes{namespace=%q,pod=%q,container!="",container!="POD"})`,
+		namespace, pod,
+	)
+	return c.QueryRange(ctx, query, start, end, step)
+}
+
 // Sample is one point in a historical trend series (SPECS.md §6.1 history
 // endpoints).
 type Sample struct {

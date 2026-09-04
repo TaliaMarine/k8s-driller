@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEventSource } from '@/composables/useEventSource'
-import { useClusterStore } from '@/stores/cluster'
 import type { PodDTO } from '@/types/api'
-import { formatCpu, formatMem, nodeHealthColor } from '@/utils/format'
+import { formatCpu, formatMem } from '@/utils/format'
 import {
   containerAllocation,
   FILTER_OPTIONS,
@@ -14,16 +13,10 @@ import {
 } from '@/composables/usePodFilters'
 import MiniRatioBar from '@/components/MiniRatioBar.vue'
 import PodDetailPanel from '@/components/PodDetailPanel.vue'
-import NodeDistributionChart from '@/components/NodeDistributionChart.vue'
-import type { DistSegment } from '@/components/NodeDistributionChart.vue'
 
-const props = defineProps<{ name: string }>()
 const router = useRouter()
-const clusterStore = useClusterStore()
 
-const { status, data: pods } = useEventSource<PodDTO[]>(`/api/v1/stream/nodes/${props.name}`)
-
-const node = computed(() => clusterStore.summary?.nodes.find((n) => n.name === props.name))
+const { status, data: pods } = useEventSource<PodDTO[]>('/api/v1/stream/workloads')
 
 const {
   search,
@@ -38,77 +31,25 @@ const {
   overMemRequestCount,
 } = usePodFilters(pods)
 
-// --- distribution chart: always reflects the whole node, independent of filters below ---
-
-const cpuUsageSegments = computed<DistSegment[]>(
-  () =>
-    pods.value
-      ?.map((p) => ({ key: podKey(p), name: p.name, value: p.usageCpu }))
-      .filter((s) => s.value > 0) ?? [],
-)
-const memUsageSegments = computed<DistSegment[]>(
-  () =>
-    pods.value
-      ?.map((p) => ({ key: podKey(p), name: p.name, value: p.usageMem }))
-      .filter((s) => s.value > 0) ?? [],
-)
-const cpuRequestSegments = computed<DistSegment[]>(
-  () =>
-    pods.value
-      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'requestsCpu') }))
-      .filter((s) => s.value > 0) ?? [],
-)
-const cpuLimitSegments = computed<DistSegment[]>(
-  () =>
-    pods.value
-      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'limitsCpu') }))
-      .filter((s) => s.value > 0) ?? [],
-)
-const memRequestSegments = computed<DistSegment[]>(
-  () =>
-    pods.value
-      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'requestsMem') }))
-      .filter((s) => s.value > 0) ?? [],
-)
-const memLimitSegments = computed<DistSegment[]>(
-  () =>
-    pods.value
-      ?.map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'limitsMem') }))
-      .filter((s) => s.value > 0) ?? [],
-)
-const cpuUsageTotal = computed(
-  () => ((node.value?.pressure.liveCpuPct ?? 0) / 100) * (node.value?.capacityCpu ?? 0),
-)
-const memUsageTotal = computed(
-  () => ((node.value?.pressure.liveMemPct ?? 0) / 100) * (node.value?.capacityMemory ?? 0),
-)
+function goToNode(nodeName: string) {
+  router.push({ name: 'node-drilldown', params: { name: nodeName } })
+}
 
 // Keyed by "namespace/name", not array index, so refreshed SSE pushes (new
-// array identity every time, SPECS.md §2 data flow) never collapse a panel
-// the user had open (Vuetify's v-model tracks these values, not positions).
+// array identity every time) never collapse a panel the user had open.
 const openPanels = ref<string[]>([])
 </script>
 
 <template>
-  <v-container fluid class="node-drilldown">
+  <v-container fluid class="workloads-view">
     <div class="d-flex align-center mb-2 ga-2">
-      <v-btn
-        icon="mdi-arrow-left"
-        variant="text"
-        density="comfortable"
-        @click="router.push({ name: 'dashboard' })"
-      />
       <div>
-        <h1 class="text-h6 mb-0">{{ name }}</h1>
+        <h1 class="text-h6 mb-0">Workloads</h1>
         <div class="text-caption text-medium-emphasis">
-          {{ node?.podCount ?? pods?.length ?? 0 }} pods
-          <template v-if="node">· {{ node.ready ? 'Ready' : 'Not Ready' }}</template>
+          {{ pods?.length ?? 0 }} pods across the cluster
         </div>
       </div>
       <v-spacer />
-      <v-chip v-if="node" :color="nodeHealthColor(node.health)" size="small" variant="flat">
-        {{ node.health }}
-      </v-chip>
       <v-chip size="small" :color="status === 'live' ? 'healthy' : 'warning'" variant="outlined">
         {{ status }}
       </v-chip>
@@ -132,29 +73,6 @@ const openPanels = ref<string[]>([])
         {{ overMemRequestCount }} / {{ pods?.length ?? 0 }} pods over memory request
       </v-chip>
     </div>
-
-    <v-card class="mb-5" variant="flat" border>
-      <v-card-text>
-        <NodeDistributionChart
-          label="CPU"
-          :capacity="node?.capacityCpu ?? 0"
-          :usage-segments="cpuUsageSegments"
-          :request-segments="cpuRequestSegments"
-          :limit-segments="cpuLimitSegments"
-          :usage="cpuUsageTotal"
-          :format="formatCpu"
-        />
-        <NodeDistributionChart
-          label="Memory"
-          :capacity="node?.capacityMemory ?? 0"
-          :usage-segments="memUsageSegments"
-          :request-segments="memRequestSegments"
-          :limit-segments="memLimitSegments"
-          :usage="memUsageTotal"
-          :format="formatMem"
-        />
-      </v-card-text>
-    </v-card>
 
     <v-card class="mb-5" variant="flat" border>
       <v-card-text class="d-flex flex-wrap align-center ga-3">
@@ -253,7 +171,7 @@ const openPanels = ref<string[]>([])
               >
                 Missing {{ chip }}
               </v-chip>
-              <div class="d-flex align-center ga-2 ml-auto mini-ratio-group">
+              <div class="d-flex align-center ga-2 ml-auto workload-row-end">
                 <MiniRatioBar
                   label="C"
                   :usage="pod.usageCpu"
@@ -265,6 +183,13 @@ const openPanels = ref<string[]>([])
                   :usage="pod.usageMem"
                   :request="containerAllocation(pod, 'requestsMem') || undefined"
                   :format="formatMem"
+                />
+                <v-btn
+                  icon="mdi-server"
+                  size="x-small"
+                  variant="text"
+                  :title="`Go to node ${pod.nodeName}`"
+                  @click.stop="goToNode(pod.nodeName)"
                 />
               </div>
             </div>
@@ -282,7 +207,7 @@ const openPanels = ref<string[]>([])
 .pod-title {
   min-width: 0;
 }
-.mini-ratio-group {
+.workload-row-end {
   flex-shrink: 0;
 }
 </style>

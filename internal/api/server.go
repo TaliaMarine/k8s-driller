@@ -120,12 +120,15 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/cluster/summary", s.sessions.RequireAuth(s.handleClusterSummary))
 	mux.HandleFunc("GET /api/v1/nodes", s.sessions.RequireAuth(s.handleListNodes))
 	mux.HandleFunc("GET /api/v1/nodes/{name}/pods", s.sessions.RequireAuth(s.handleNodePods))
+	mux.HandleFunc("GET /api/v1/pods", s.sessions.RequireAuth(s.handleListPods))
 	mux.HandleFunc("GET /api/v1/pods/{namespace}/{name}", s.sessions.RequireAuth(s.handlePodDetail))
 	mux.HandleFunc("GET /api/v1/pods/{namespace}/{name}/recommendation", s.sessions.RequireAuth(s.handlePodRecommendation))
+	mux.HandleFunc("GET /api/v1/pods/{namespace}/{name}/analysis", s.sessions.RequireAuth(s.handlePodAnalysis))
 	mux.HandleFunc("GET /api/v1/history/nodes/{name}", s.sessions.RequireAuth(s.handleNodeHistory))
 
 	mux.HandleFunc("GET /api/v1/stream/cluster", s.sessions.RequireAuth(s.handleStreamCluster))
 	mux.HandleFunc("GET /api/v1/stream/nodes/{name}", s.sessions.RequireAuth(s.handleStreamNode))
+	mux.HandleFunc("GET /api/v1/stream/workloads", s.sessions.RequireAuth(s.handleStreamWorkloads))
 	mux.HandleFunc("GET /api/v1/stream/alerts", s.sessions.RequireAuth(s.handleStreamAlerts))
 
 	mux.HandleFunc("GET /api/v1/admin/users", s.sessions.RequireRole(v1alpha1.RoleAdmin, s.handleListUsers))

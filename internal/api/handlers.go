@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/TaliaMarine/k8s-driller/internal/alerts"
+	"github.com/TaliaMarine/k8s-driller/internal/analysis"
 	"github.com/TaliaMarine/k8s-driller/internal/auth"
 	"github.com/TaliaMarine/k8s-driller/internal/pressure"
 	"github.com/TaliaMarine/k8s-driller/internal/promclient"
@@ -115,6 +117,178 @@ func (s *Server) handlePodRecommendation(w http.ResponseWriter, r *http.Request)
 		RecommendedLimitMem:   s.pressure.RecommendedMemLimit(recReqMem),
 		Wasteful:              s.pressure.Wasteful(p95CPU, reqCPU) || s.pressure.Wasteful(p95Mem, reqMem),
 	})
+}
+
+// analysisMaxDays caps the Analysis tab's lookback window (SPECS.md §9's
+// history/recommendation logic, extended). A month is enough to catch
+// weekly cycles without the query fanning out over an unbounded range.
+const analysisMaxDays = 30
+
+// SampleDTO is one point in a historical usage series, used both for the
+// Analysis tab's chart and the raw data included in the AI export.
+type SampleDTO struct {
+	T time.Time `json:"t"`
+	V float64   `json:"v"`
+}
+
+// PodAnalysisDTO is the Analysis tab's full payload: raw historical series,
+// summary statistics, and the derived request/limit recommendations
+// (internal/analysis).
+type PodAnalysisDTO struct {
+	RangeStart    time.Time `json:"rangeStart"`
+	RangeEnd      time.Time `json:"rangeEnd"`
+	RequestedDays int       `json:"requestedDays"`
+	// AvailableDays is how much history Prometheus actually had, which can
+	// be less than RequestedDays on a freshly deployed Prometheus.
+	AvailableDays float64 `json:"availableDays"`
+
+	CPUSamples []SampleDTO    `json:"cpuSamples"`
+	MemSamples []SampleDTO    `json:"memSamples"`
+	CPUStats   analysis.Stats `json:"cpuStats"`
+	MemStats   analysis.Stats `json:"memStats"`
+
+	CurrentRequestCPU *int64 `json:"currentRequestCpu,omitempty"`
+	CurrentLimitCPU   *int64 `json:"currentLimitCpu,omitempty"`
+	CurrentRequestMem *int64 `json:"currentRequestMem,omitempty"`
+	CurrentLimitMem   *int64 `json:"currentLimitMem,omitempty"`
+
+	CPURecommendation analysis.Recommendation `json:"cpuRecommendation"`
+	MemRecommendation analysis.Recommendation `json:"memRecommendation"`
+
+	Wasteful         bool `json:"wasteful"`
+	UnderProvisioned bool `json:"underProvisioned"`
+}
+
+func sampleValues(samples []promclient.Sample) []float64 {
+	out := make([]float64, len(samples))
+	for i, s := range samples {
+		out[i] = s.Value
+	}
+	return out
+}
+
+func sampleTimestamps(samples []promclient.Sample) []time.Time {
+	out := make([]time.Time, len(samples))
+	for i, s := range samples {
+		out[i] = s.Timestamp
+	}
+	return out
+}
+
+func toSampleDTOs(samples []promclient.Sample) []SampleDTO {
+	out := make([]SampleDTO, len(samples))
+	for i, s := range samples {
+		out[i] = SampleDTO{T: s.Timestamp, V: s.Value}
+	}
+	return out
+}
+
+func (s *Server) handlePodAnalysis(w http.ResponseWriter, r *http.Request) {
+	namespace, name := r.PathValue("namespace"), r.PathValue("name")
+	pod, ok := s.watch.Pod(namespace, name)
+	if !ok {
+		http.Error(w, "pod not found", http.StatusNotFound)
+		return
+	}
+
+	days := analysisMaxDays
+	if v := r.URL.Query().Get("days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= analysisMaxDays {
+			days = n
+		}
+	}
+
+	end := time.Now()
+	start := end.Add(-time.Duration(days) * 24 * time.Hour)
+	const step = 15 * time.Minute
+
+	cpuSamples, err := s.prom.PodCPUUsageRange(r.Context(), namespace, name, start, end, step)
+	if err != nil && err != promclient.ErrNotConfigured {
+		http.Error(w, "prometheus query failed", http.StatusBadGateway)
+		return
+	}
+	memSamples, err := s.prom.PodMemoryUsageRange(r.Context(), namespace, name, start, end, step)
+	if err != nil && err != promclient.ErrNotConfigured {
+		http.Error(w, "prometheus query failed", http.StatusBadGateway)
+		return
+	}
+	if len(cpuSamples) == 0 && len(memSamples) == 0 {
+		http.Error(w, "prometheus unavailable or no history in this window", http.StatusNotFound)
+		return
+	}
+
+	cpuStats := analysis.Compute(sampleValues(cpuSamples))
+	memStats := analysis.Compute(sampleValues(memSamples))
+
+	// Peak-bucket memory before recommending off it (see RecommendMemory):
+	// daily buckets normally, hourly when there isn't even two days of
+	// history yet to bucket daily.
+	peakBucket := 24 * time.Hour
+	if len(memSamples) > 0 && end.Sub(memSamples[0].Timestamp) < 2*24*time.Hour {
+		peakBucket = time.Hour
+	}
+	memPeakStats := analysis.Compute(analysis.PeakBucket(sampleTimestamps(memSamples), sampleValues(memSamples), peakBucket))
+
+	alloc := pressure.AggregatePod(pod.Containers)
+	var reqCPU, limitCPU, reqMem, limitMem *int64
+	if alloc.RequestsCPU > 0 {
+		v := alloc.RequestsCPU
+		reqCPU = &v
+	}
+	if alloc.LimitsCPU > 0 {
+		v := alloc.LimitsCPU
+		limitCPU = &v
+	}
+	if alloc.RequestsMem > 0 {
+		v := alloc.RequestsMem
+		reqMem = &v
+	}
+	if alloc.LimitsMem > 0 {
+		v := alloc.LimitsMem
+		limitMem = &v
+	}
+
+	cpuRec := analysis.RecommendCPU(cpuStats, s.pressure.RecommendationHeadroomPct, s.pressure.CPULimitMultiplier)
+	memRec := analysis.RecommendMemory(memPeakStats, s.pressure.RecommendationHeadroomPct, s.pressure.MemLimitMultiplier)
+
+	wasteful := s.pressure.Wasteful(int64(cpuStats.P95), reqCPU) || s.pressure.Wasteful(int64(memStats.P95), reqMem)
+	underProvisioned := (reqCPU != nil && cpuRec.RecommendedRequest > int64(float64(*reqCPU)*1.2)) ||
+		(reqMem != nil && memRec.RecommendedRequest > int64(float64(*reqMem)*1.2))
+
+	availableDays := float64(days)
+	switch {
+	case len(memSamples) > 0:
+		availableDays = end.Sub(memSamples[0].Timestamp).Hours() / 24
+	case len(cpuSamples) > 0:
+		availableDays = end.Sub(cpuSamples[0].Timestamp).Hours() / 24
+	}
+
+	writeJSON(w, http.StatusOK, PodAnalysisDTO{
+		RangeStart:        start,
+		RangeEnd:          end,
+		RequestedDays:     days,
+		AvailableDays:     availableDays,
+		CPUSamples:        toSampleDTOs(cpuSamples),
+		MemSamples:        toSampleDTOs(memSamples),
+		CPUStats:          cpuStats,
+		MemStats:          memStats,
+		CurrentRequestCPU: reqCPU,
+		CurrentLimitCPU:   limitCPU,
+		CurrentRequestMem: reqMem,
+		CurrentLimitMem:   limitMem,
+		CPURecommendation: cpuRec,
+		MemRecommendation: memRec,
+		Wasteful:          wasteful,
+		UnderProvisioned:  underProvisioned,
+	})
+}
+
+func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.buildAllPodDTOs())
+}
+
+func (s *Server) handleStreamWorkloads(w http.ResponseWriter, r *http.Request) {
+	s.hub.ServeHTTP(w, r, "workloads")
 }
 
 func (s *Server) handleNodeHistory(w http.ResponseWriter, r *http.Request) {

@@ -41,6 +41,16 @@ pass/fail for each — this is a mechanical verification pass, not a design revi
      `value:`.
    - `helm template charts/k8s-driller --set oidc.clientIdRef.name=x --set oidc.clientIdRef.key=y` →
      `DRILLER_OIDC_CLIENT_ID` is a `valueFrom.secretKeyRef`, and `oidc.clientId` is ignored.
+9. HTTPRoute server-defaulted fields — a field the Gateway API CRD schema `+kubebuilder:default`s
+   (`parentRefs[].group`/`.kind`, `backendRefs[].group`/`.kind`/`.weight`) must be set explicitly in the
+   template to the exact value the API server would inject, or a GitOps tool diffing the live object
+   against this manifest never stops reporting drift (this was a real reported bug — a continuous Argo CD
+   OutOfSync loop). Render gateway-api mode and grep for all five:
+   - `helm template charts/k8s-driller --set ingress.type=gateway-api --set ingress.host=x --set ingress.gatewayApi.gatewayName=gw`
+   - `parentRefs[0]` must have `group: gateway.networking.k8s.io` and `kind: Gateway`.
+   - `rules[0].backendRefs[0]` must have `group: ""`, `kind: Service`, and `weight: 1`.
+   - If a future Gateway API version changes these defaults, re-check against
+     `apis/v1/{shared,object_reference}_types.go` in kubernetes-sigs/gateway-api rather than guessing.
 
 Report each numbered check as pass/fail with the offending output inline for any failure. Don't attempt to
 fix chart issues yourself unless explicitly asked — this skill's job is detection, not remediation.

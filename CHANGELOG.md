@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.2.0...v2.2.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* distinguish requests/limits colors, add a third usage row to the chart ([9dd0be1](https://github.com/TaliaMarine/k8s-driller/commit/9dd0be16a432183782a8b9dcab4550f214c2422e))
+* exclude terminal (Succeeded/Failed) pods from node calculations ([0b2e526](https://github.com/TaliaMarine/k8s-driller/commit/0b2e526a26a01d775ec88fa60b38bca292a392e9))
+
 ## [2.2.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.3...v2.2.0) (2026-09-04)
 
 

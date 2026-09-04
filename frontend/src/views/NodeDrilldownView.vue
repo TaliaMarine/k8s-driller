@@ -6,6 +6,7 @@ import { useClusterStore } from '@/stores/cluster'
 import type { PodDTO } from '@/types/api'
 import { formatCpu, formatMem, nodeHealthColor } from '@/utils/format'
 import DeltaBars from '@/components/DeltaBars.vue'
+import MiniRatioBar from '@/components/MiniRatioBar.vue'
 import NodeDistributionChart from '@/components/NodeDistributionChart.vue'
 import type { DistSegment } from '@/components/NodeDistributionChart.vue'
 
@@ -73,6 +74,20 @@ const memUsageTotal = computed(
   () => ((node.value?.pressure.liveMemPct ?? 0) / 100) * (node.value?.capacityMemory ?? 0),
 )
 
+// Whole node, independent of the filters below — matches the distribution
+// charts above, which are also always node-wide.
+function isOverRequest(pod: PodDTO, resource: 'cpu' | 'mem'): boolean {
+  const usage = resource === 'cpu' ? pod.usageCpu : pod.usageMem
+  const request = containerAllocation(pod, resource === 'cpu' ? 'requestsCpu' : 'requestsMem')
+  return request > 0 && usage > request
+}
+const overCpuRequestCount = computed(
+  () => (pods.value ?? []).filter((p) => isOverRequest(p, 'cpu')).length,
+)
+const overMemRequestCount = computed(
+  () => (pods.value ?? []).filter((p) => isOverRequest(p, 'mem')).length,
+)
+
 // --- filters ---
 
 const search = ref('')
@@ -85,6 +100,8 @@ const FILTER_OPTIONS = [
   { value: 'missing-cpu-limit', label: 'Missing CPU limit' },
   { value: 'missing-mem-request', label: 'Missing mem request' },
   { value: 'missing-mem-limit', label: 'Missing mem limit' },
+  { value: 'over-cpu-request', label: 'Over CPU request' },
+  { value: 'over-mem-request', label: 'Over mem request' },
   { value: 'oom-risk', label: 'OOM-Risk' },
   { value: 'throttling-risk', label: 'Throttling-Risk' },
 ]
@@ -109,6 +126,10 @@ function matchesFilter(pod: PodDTO, filter: string): boolean {
       return hasMissing(pod, 'missingRequestsMem')
     case 'missing-mem-limit':
       return hasMissing(pod, 'missingLimitsMem')
+    case 'over-cpu-request':
+      return isOverRequest(pod, 'cpu')
+    case 'over-mem-request':
+      return isOverRequest(pod, 'mem')
     case 'oom-risk':
       return pod.oomRisk
     case 'throttling-risk':
@@ -205,6 +226,25 @@ const openPanels = ref<string[]>([])
       </v-chip>
       <v-chip size="small" :color="status === 'live' ? 'healthy' : 'warning'" variant="outlined">
         {{ status }}
+      </v-chip>
+    </div>
+
+    <div class="d-flex flex-wrap ga-3 mb-4">
+      <v-chip
+        :color="overCpuRequestCount > 0 ? 'critical' : 'healthy'"
+        variant="tonal"
+        size="small"
+      >
+        <v-icon v-if="overCpuRequestCount > 0" start icon="mdi-alert" />
+        {{ overCpuRequestCount }} / {{ pods?.length ?? 0 }} pods over CPU request
+      </v-chip>
+      <v-chip
+        :color="overMemRequestCount > 0 ? 'critical' : 'healthy'"
+        variant="tonal"
+        size="small"
+      >
+        <v-icon v-if="overMemRequestCount > 0" start icon="mdi-alert" />
+        {{ overMemRequestCount }} / {{ pods?.length ?? 0 }} pods over memory request
       </v-chip>
     </div>
 
@@ -313,6 +353,20 @@ const openPanels = ref<string[]>([])
               >
                 Missing {{ chip }}
               </v-chip>
+              <div class="d-flex align-center ga-2 ml-auto mini-ratio-group">
+                <MiniRatioBar
+                  label="C"
+                  :usage="pod.usageCpu"
+                  :request="containerAllocation(pod, 'requestsCpu') || undefined"
+                  :format="formatCpu"
+                />
+                <MiniRatioBar
+                  label="M"
+                  :usage="pod.usageMem"
+                  :request="containerAllocation(pod, 'requestsMem') || undefined"
+                  :format="formatMem"
+                />
+              </div>
             </div>
           </v-expansion-panel-title>
           <v-expansion-panel-text>
@@ -342,5 +396,8 @@ const openPanels = ref<string[]>([])
 <style scoped>
 .pod-title {
   min-width: 0;
+}
+.mini-ratio-group {
+  flex-shrink: 0;
 }
 </style>

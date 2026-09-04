@@ -96,12 +96,39 @@ helm install driller ./charts/k8s-driller \
 
 The app generates the admin bootstrap token and session signing key itself on first startup (as Secrets in
 its own namespace) if they don't already exist, and reuses them on every restart — not the chart, and not
-via `helm upgrade`/`lookup`, which isn't deterministic under `helm template` (see SPECS.md §4.2). Fetch the
-bootstrap token to promote your first admin:
+via `helm upgrade`/`lookup`, which isn't deterministic under `helm template` (see SPECS.md §4.2).
 
-```sh
-kubectl -n driller get secret driller-admin-token -o jsonpath='{.data.token}' | base64 -d
-```
+### Promoting your first admin
+
+Every OIDC login defaults to `viewer` (SPECS.md §4.1) — there's no admin until you promote one, and the
+Role Management screen has nothing to click on for a user who's never been assigned a role, so this first
+promotion goes through the API directly with the bootstrap token, not the UI.
+
+1. Fetch the bootstrap token:
+
+   ```sh
+   kubectl -n driller get secret driller-admin-token -o jsonpath='{.data.token}' | base64 -d
+   ```
+
+2. Sign in through the UI once (so the app has seen your account), then find your own OIDC subject by
+   visiting `/api/v1/auth/me` directly in the browser while logged in — it returns
+   `{"subject": "...", "email": "...", "role": "viewer", ...}`.
+
+3. Promote that subject to admin, using the token from step 1 as the `X-Driller-Admin-Token` header
+   (URL-encode the subject — some OIDC providers put characters like `|` in it):
+
+   ```sh
+   curl -X PUT "https://driller.example.com/api/v1/admin/users/<url-encoded-subject>/role" \
+     -H "X-Driller-Admin-Token: <token from step 1>" \
+     -H "Content-Type: application/json" \
+     -d '{"role":"admin"}'
+   ```
+
+4. **Log out and log back in.** Your role is baked into the signed session cookie at login time
+   (SPECS.md §4.1) — the change in step 3 doesn't retroactively touch a session you're already holding.
+
+From here you're an admin: promote everyone else through the UI's Role Management screen, and the
+bootstrap token is only needed again if you lose every admin account.
 
 See [`charts/k8s-driller/values.yaml`](./charts/k8s-driller/values.yaml) for every configurable value
 (Prometheus, recommendation thresholds, Gateway API ingress, optional integrations, etc.), and SPECS.md §8

@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.4.1...v2.5.0) (2026-09-04)
+
+
+### Features
+
+* add cluster-wide Workloads view, pod history analysis, and AI export ([2f1a5c6](https://github.com/TaliaMarine/k8s-driller/commit/2f1a5c604ac9318bc89a84af5269e90252b2c64c))
+* add drill-bit favicon ([91bb3f9](https://github.com/TaliaMarine/k8s-driller/commit/91bb3f9ff7ef9096c958865f024fa65f15233881))
+* flag pods with implausibly high CPU/memory requests or limits ([e4c46f5](https://github.com/TaliaMarine/k8s-driller/commit/e4c46f57e72f43a24d942841af280a16df415e3f))
+
 ## [2.4.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.4.0...v2.4.1) (2026-09-04)
 
 

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -55,6 +56,17 @@ func NewAuthenticator(ctx context.Context, issuerURL, clientID, clientSecret, re
 		sessions: sessions,
 		roles:    roles,
 	}, nil
+}
+
+// displayName picks the best human-readable name available from standard
+// OIDC "profile" scope claims — the "name" claim if the provider sends one,
+// else "given_name family_name" if either half is present, else "" (the
+// frontend falls back to email — see types/api.ts CurrentUser).
+func displayName(name, givenName, familyName string) string {
+	if name != "" {
+		return name
+	}
+	return strings.TrimSpace(givenName + " " + familyName)
 }
 
 func randToken() (string, error) {
@@ -130,8 +142,11 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var claims struct {
-		Subject string `json:"sub"`
-		Email   string `json:"email"`
+		Subject    string `json:"sub"`
+		Email      string `json:"email"`
+		Name       string `json:"name"`
+		GivenName  string `json:"given_name"`
+		FamilyName string `json:"family_name"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		http.Error(w, "invalid id_token claims", http.StatusUnauthorized)
@@ -143,7 +158,7 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		role = existing.Spec.Role
 	}
 
-	if err := a.sessions.Issue(w, claims.Subject, claims.Email, role); err != nil {
+	if err := a.sessions.Issue(w, claims.Subject, claims.Email, displayName(claims.Name, claims.GivenName, claims.FamilyName), role); err != nil {
 		http.Error(w, "failed to start session", http.StatusInternalServerError)
 		return
 	}

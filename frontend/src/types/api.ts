@@ -85,6 +85,7 @@ export type Role = 'admin' | 'viewer'
 export interface CurrentUser {
   subject: string
   email: string
+  name: string // best-effort display name from OIDC "profile" claims; "" if the provider sent none
   role: Role
   expires: string
 }

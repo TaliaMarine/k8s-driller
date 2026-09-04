@@ -24,6 +24,7 @@ const sessionTTL = 12 * time.Hour
 type Session struct {
 	Subject   string        `json:"sub"`
 	Email     string        `json:"email"`
+	Name      string        `json:"name"` // best-effort display name from OIDC "profile" claims; "" if the provider sent none
 	Role      v1alpha1.Role `json:"role"`
 	ExpiresAt time.Time     `json:"exp"`
 }
@@ -48,8 +49,8 @@ func (m *SessionManager) sign(payload []byte) string {
 }
 
 // Issue sets a signed session cookie for subject/email/role on w.
-func (m *SessionManager) Issue(w http.ResponseWriter, subject, email string, role v1alpha1.Role) error {
-	sess := Session{Subject: subject, Email: email, Role: role, ExpiresAt: time.Now().Add(sessionTTL)}
+func (m *SessionManager) Issue(w http.ResponseWriter, subject, email, name string, role v1alpha1.Role) error {
+	sess := Session{Subject: subject, Email: email, Name: name, Role: role, ExpiresAt: time.Now().Add(sessionTTL)}
 	payload, err := json.Marshal(sess)
 	if err != nil {
 		return err

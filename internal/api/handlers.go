@@ -26,6 +26,7 @@ func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"subject": sess.Subject,
 		"email":   sess.Email,
+		"name":    sess.Name,
 		"role":    sess.Role,
 		"expires": sess.ExpiresAt,
 	})

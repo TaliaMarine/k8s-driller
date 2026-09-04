@@ -451,6 +451,13 @@ exactly when it matters most — a burst of pods being scheduled at once. (`inte
 - **Wild-West** = pod has ≥1 container missing `resources.requests.cpu`, `requests.memory`, `limits.cpu`,
   or `limits.memory` — each missing dimension flagged individually, not collapsed into one generic
   "misconfigured" tag.
+- **High allocation** (`frontend/src/composables/usePodFilters.ts`, client-side — no Prometheus or node
+  capacity involved) = a pod's own configured request or limit (the larger of the two, per resource) clears
+  50 cores CPU or 50GiB memory. This is independent of node capacity/live usage and of Wild-West (a
+  present-but-implausible value, not a missing one); it exists to catch an extra zero or a copy-pasted
+  placeholder in the YAML, which the other pressure states wouldn't flag since a request that high is
+  neither "missing" nor (yet) "over capacity". Shown as a chip naming the actual value and how many times
+  the threshold it clears.
 - **OOM-Risk** = live memory usage (from metrics-server) `> 90%` of the container's memory **limit**. Not
   computable (and not shown, rather than shown as false) if no memory limit is set — that pod is Wild-West
   instead.

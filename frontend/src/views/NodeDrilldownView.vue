@@ -8,6 +8,9 @@ import { formatCpu, formatMem, nodeHealthColor } from '@/utils/format'
 import {
   containerAllocation,
   FILTER_OPTIONS,
+  highAllocationLabel,
+  highAllocations,
+  highAllocationTooltip,
   missingChips,
   podKey,
   usePodFilters,
@@ -252,6 +255,17 @@ const openPanels = ref<string[]>([])
                 variant="outlined"
               >
                 Missing {{ chip }}
+              </v-chip>
+              <v-chip
+                v-for="high in highAllocations(pod)"
+                :key="high.resource"
+                color="warning"
+                size="small"
+                variant="flat"
+                :title="highAllocationTooltip(high)"
+              >
+                <v-icon start icon="mdi-arrow-up-bold" />
+                {{ highAllocationLabel(high) }}
               </v-chip>
               <div class="d-flex align-center ga-2 ml-auto mini-ratio-group">
                 <MiniRatioBar

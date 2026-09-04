@@ -3,6 +3,7 @@
 // Workloads view so the two stay in lockstep instead of drifting apart.
 import { computed, ref, type Ref } from 'vue'
 import type { PodDTO } from '@/types/api'
+import { formatCpu, formatMem } from '@/utils/format'
 
 export interface PodGroup {
   namespace: string
@@ -41,6 +42,58 @@ export function isOverRequest(pod: PodDTO, resource: 'cpu' | 'mem'): boolean {
   const usage = resource === 'cpu' ? pod.usageCpu : pod.usageMem
   const request = containerAllocation(pod, resource === 'cpu' ? 'requestsCpu' : 'requestsMem')
   return request > 0 && usage > request
+}
+
+// Thresholds for flagging a pod's own configured request/limit as
+// unusually large on its face — independent of node capacity or live usage,
+// which the other pressure states already cover. 50 cores / 50GiB is well
+// above any normal single-container workload, so a pod that clears either
+// one is almost always a typo (an extra zero) or a placeholder value left
+// over from copy-pasted YAML.
+const HIGH_CPU_THRESHOLD_MILLI = 50_000 // 50 cores
+const HIGH_MEM_THRESHOLD_BYTES = 50 * 1024 * 1024 * 1024 // 50GiB
+
+export interface HighAllocation {
+  resource: 'cpu' | 'mem'
+  value: number
+  ratio: number
+}
+
+// highAllocations reports which of a pod's own request/limit values (the
+// larger of the two, per resource) clear the "implausibly large" thresholds
+// above, for the "how overly high" chip on the pod list rows.
+export function highAllocations(pod: PodDTO): HighAllocation[] {
+  const out: HighAllocation[] = []
+
+  const cpu = Math.max(
+    containerAllocation(pod, 'requestsCpu'),
+    containerAllocation(pod, 'limitsCpu'),
+  )
+  if (cpu > HIGH_CPU_THRESHOLD_MILLI) {
+    out.push({ resource: 'cpu', value: cpu, ratio: cpu / HIGH_CPU_THRESHOLD_MILLI })
+  }
+
+  const mem = Math.max(
+    containerAllocation(pod, 'requestsMem'),
+    containerAllocation(pod, 'limitsMem'),
+  )
+  if (mem > HIGH_MEM_THRESHOLD_BYTES) {
+    out.push({ resource: 'mem', value: mem, ratio: mem / HIGH_MEM_THRESHOLD_BYTES })
+  }
+
+  return out
+}
+
+export function highAllocationLabel(high: HighAllocation): string {
+  return high.resource === 'cpu'
+    ? `High CPU: ${formatCpu(high.value)} cores`
+    : `High Memory: ${formatMem(high.value)}`
+}
+
+export function highAllocationTooltip(high: HighAllocation): string {
+  const name = high.resource === 'cpu' ? 'CPU' : 'Memory'
+  const unit = high.resource === 'cpu' ? '50-core' : '50GiB'
+  return `${name} request/limit is ${high.ratio.toFixed(1)}x the ${unit} sanity threshold — likely a misconfigured value`
 }
 
 export function missingChips(pod: PodDTO): string[] {

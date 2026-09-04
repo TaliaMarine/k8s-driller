@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.3.0...v2.4.0) (2026-09-04)
+
+
+### Features
+
+* user menu with display name and profile dialog, home nav from anywhere ([7329392](https://github.com/TaliaMarine/k8s-driller/commit/7329392ea4b1d480d46db3e6d58b9fdab1a1db6b))
+
 ## [2.3.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.2.1...v2.3.0) (2026-09-04)
 
 

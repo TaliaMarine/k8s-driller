@@ -23,6 +23,7 @@ export interface NodeDTO {
   pressure: NodePressure
   health: NodeHealth
   podCount: number
+  podsOverRequests: number
 }
 
 export interface ClusterSummaryDTO {

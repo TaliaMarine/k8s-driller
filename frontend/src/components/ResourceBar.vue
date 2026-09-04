@@ -8,12 +8,18 @@ const props = defineProps<{
   overcommit?: boolean
 }>()
 
+// Live severity and overcommit are two different questions — "is usage
+// actually a problem right now" vs. "could the config become a problem" —
+// so they get two separate signals instead of overcommit forcing the live
+// bar to critical regardless of actual usage. Live: healthy/warning/critical
+// by usage alone. Allocation (below): grey normally, warning when
+// overcommitted.
 const liveColor = computed(() => {
-  if (props.overcommit) return 'critical'
   if (props.livePct > 90) return 'critical'
   if (props.livePct > 75) return 'warning'
   return 'healthy'
 })
+const allocationColor = computed(() => (props.overcommit ? 'warning' : 'grey'))
 </script>
 
 <template>
@@ -26,7 +32,7 @@ const liveColor = computed(() => {
       <v-progress-linear
         :model-value="Math.min(allocationPct, 100)"
         height="14"
-        color="grey"
+        :color="allocationColor"
         bg-color="surface-variant"
         rounded
       />

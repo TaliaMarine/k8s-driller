@@ -13,9 +13,9 @@ const healthColor = computed(() => nodeHealthColor(props.node.health))
   <v-card
     :to="`/nodes/${node.name}`"
     :class="['node-card', { 'not-ready': !node.ready }]"
-    :variant="node.health === 'Overcommit' ? 'outlined' : 'elevated'"
+    :variant="node.health === 'Healthy' ? 'elevated' : 'outlined'"
     :style="{
-      borderColor: node.health === 'Overcommit' ? `rgb(var(--v-theme-critical))` : undefined,
+      borderColor: node.health !== 'Healthy' ? `rgb(var(--v-theme-${healthColor}))` : undefined,
     }"
   >
     <v-card-item>
@@ -58,7 +58,12 @@ const healthColor = computed(() => nodeHealthColor(props.node.health))
         >
       </v-alert>
 
-      <div class="text-caption text-medium-emphasis mt-2">{{ node.podCount }} pods</div>
+      <div class="text-caption text-medium-emphasis mt-2">
+        {{ node.podCount }} pods
+        <span v-if="node.podsOverRequests > 0" class="text-warning">
+          · {{ node.podsOverRequests }} over requests
+        </span>
+      </div>
     </v-card-text>
   </v-card>
 </template>

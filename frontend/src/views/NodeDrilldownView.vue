@@ -291,17 +291,32 @@ const openPanels = ref<string[]>([])
           clearable
           style="max-width: 220px"
         />
-        <v-chip-group v-model="activeFilters" multiple filter column>
-          <v-chip
-            v-for="opt in FILTER_OPTIONS"
-            :key="opt.value"
-            :value="opt.value"
-            size="small"
-            variant="outlined"
-          >
-            {{ opt.label }}
-          </v-chip>
-        </v-chip-group>
+        <v-select
+          v-model="activeFilters"
+          :items="FILTER_OPTIONS"
+          item-title="label"
+          item-value="value"
+          label="Filters"
+          multiple
+          density="compact"
+          hide-details
+          clearable
+          style="max-width: 220px"
+        >
+          <template #selection="{ index }">
+            <span v-if="index === 0" class="text-caption">
+              {{ activeFilters.length }} filter{{ activeFilters.length === 1 ? '' : 's' }}
+            </span>
+          </template>
+          <template #item="{ item, props: itemProps }">
+            <v-list-item v-bind="itemProps" :title="undefined">
+              <template #prepend="{ isSelected }">
+                <v-checkbox-btn :model-value="isSelected" />
+              </template>
+              {{ item.label }}
+            </v-list-item>
+          </template>
+        </v-select>
         <v-spacer />
         <span class="text-caption text-medium-emphasis"
           >{{ filteredPods.length }} / {{ pods?.length ?? 0 }} pods</span

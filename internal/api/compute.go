@@ -70,11 +70,32 @@ func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
 	}
 }
 
+// podOverRequests reports whether a pod's live usage exceeds its own
+// requested CPU or memory — the same "is this pod already eating into its
+// neighbors' headroom" signal the drilldown page's isOverRequest computes
+// client-side, surfaced here so the dashboard card can show a count without
+// shipping every pod's usage down to the browser.
+func (s *Server) podOverRequests(p k8swatch.PodInfo) bool {
+	alloc := pressure.AggregatePod(p.Containers)
+	usageCPU, usageMem, _, _ := s.usage.PodUsage(p.Namespace, p.Name)
+	if alloc.RequestsCPU > 0 && usageCPU > alloc.RequestsCPU {
+		return true
+	}
+	if alloc.RequestsMem > 0 && usageMem > alloc.RequestsMem {
+		return true
+	}
+	return false
+}
+
 func (s *Server) buildNodeDTO(n k8swatch.NodeInfo) NodeDTO {
 	pods := activePods(s.watch.PodsOnNode(n.Name))
 	allocations := make([]pressure.PodAllocation, 0, len(pods))
+	overRequests := 0
 	for _, p := range pods {
 		allocations = append(allocations, pressure.AggregatePod(p.Containers))
+		if s.podOverRequests(p) {
+			overRequests++
+		}
 	}
 	alloc := pressure.AggregateNode(allocations)
 
@@ -86,13 +107,14 @@ func (s *Server) buildNodeDTO(n k8swatch.NodeInfo) NodeDTO {
 	p := pressure.ComputeNodePressure(alloc, liveCPU, liveMem, n.Capacity)
 
 	return NodeDTO{
-		Name:           n.Name,
-		Ready:          n.Ready,
-		CapacityCPU:    n.Capacity.CPU,
-		CapacityMemory: n.Capacity.Memory,
-		Pressure:       p,
-		Health:         nodeHealth(p),
-		PodCount:       len(pods),
+		Name:             n.Name,
+		Ready:            n.Ready,
+		CapacityCPU:      n.Capacity.CPU,
+		CapacityMemory:   n.Capacity.Memory,
+		Pressure:         p,
+		Health:           nodeHealth(p),
+		PodCount:         len(pods),
+		PodsOverRequests: overRequests,
 	}
 }
 

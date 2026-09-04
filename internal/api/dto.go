@@ -55,13 +55,14 @@ type PodDTO struct {
 
 // NodeDTO is one node card's worth of data (SPECS.md §2.1/§7.1).
 type NodeDTO struct {
-	Name           string                `json:"name"`
-	Ready          bool                  `json:"ready"`
-	CapacityCPU    int64                 `json:"capacityCpu"`
-	CapacityMemory int64                 `json:"capacityMemory"`
-	Pressure       pressure.NodePressure `json:"pressure"`
-	Health         string                `json:"health"`
-	PodCount       int                   `json:"podCount"`
+	Name             string                `json:"name"`
+	Ready            bool                  `json:"ready"`
+	CapacityCPU      int64                 `json:"capacityCpu"`
+	CapacityMemory   int64                 `json:"capacityMemory"`
+	Pressure         pressure.NodePressure `json:"pressure"`
+	Health           string                `json:"health"`
+	PodCount         int                   `json:"podCount"`
+	PodsOverRequests int                   `json:"podsOverRequests"`
 }
 
 // ClusterSummaryDTO is the top-of-dashboard totals bar plus every node
@@ -76,14 +77,20 @@ type ClusterSummaryDTO struct {
 	TotalLiveMemPct     float64   `json:"totalLiveMemPct"`
 }
 
+// Live pressure (>90% of capacity, an immediate problem) is checked before
+// Overcommit (limits exceeding capacity — a configuration risk that may
+// never actually bite, since it only matters if pods actually use their
+// limit) so a node that's both shows the more urgent signal. See
+// nodeHealthColor's severity mapping on the frontend for the other half of
+// this: Overcommit reads as warning, CPU/Mem Pressure as critical.
 func nodeHealth(p pressure.NodePressure) string {
 	switch {
-	case p.OvercommitCPU || p.OvercommitMem:
-		return NodeOvercommit
 	case p.LiveMemPct > nodeLivePressureThresholdPct:
 		return NodeMemPressure
 	case p.LiveCPUPct > nodeLivePressureThresholdPct:
 		return NodeCPUPressure
+	case p.OvercommitCPU || p.OvercommitMem:
+		return NodeOvercommit
 	default:
 		return NodeHealthy
 	}

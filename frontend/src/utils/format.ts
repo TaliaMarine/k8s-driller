@@ -1,14 +1,20 @@
 import type { NodeHealth } from '@/types/api'
 
-/** Maps a node's health label to the shared severity theme color (SPECS.md §7.2). */
+/**
+ * Maps a node's health label to the shared severity theme color (SPECS.md
+ * §7.2). Overcommit is a configuration risk, not an immediate one — it only
+ * bites if pods actually use their limit — so it reads as warning, not
+ * critical. Critical is reserved for CPU/Mem Pressure (live usage already
+ * over 90% of capacity, a problem happening right now).
+ */
 export function nodeHealthColor(health: NodeHealth): string {
   switch (health) {
     case 'Healthy':
       return 'healthy'
     case 'Overcommit':
-      return 'critical'
-    default:
       return 'warning'
+    default:
+      return 'critical'
   }
 }
 

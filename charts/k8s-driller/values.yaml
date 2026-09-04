@@ -48,7 +48,10 @@ networkPolicy:
 # --- OIDC (SPECS.md §4.1) ---
 oidc:
   issuerUrl: ""
-  clientId: ""
+  clientId: "" # ignored if clientIdRef.name is set
+  clientIdRef:
+    name: ""
+    key: ""
   clientSecretRef:
     name: ""
     key: ""

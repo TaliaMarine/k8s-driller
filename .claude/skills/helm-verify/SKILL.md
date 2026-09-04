@@ -33,6 +33,14 @@ pass/fail for each — this is a mechanical verification pass, not a design revi
    - Also confirm no `templates/secret-*.yaml` exists in the chart at all — Secret generation lives in the
      app (`internal/runtimesecrets`), not the chart, specifically because the chart's old
      `randAlphaNum`+`lookup` approach wasn't deterministic under `helm template`.
+8. `oidc.clientId` vs `oidc.clientIdRef` — every chart value that has an operator-supplied-Secret
+   equivalent (this one, plus the two in check 7) must be settable entirely through `values.yaml`, with
+   zero Kustomize/Helm post-render patches required downstream — that's the point of the `*Ref` pattern.
+   Render both ways and confirm the env var switches shape correctly:
+   - `helm template charts/k8s-driller --set oidc.clientId=plain-id` → `DRILLER_OIDC_CLIENT_ID` is a plain
+     `value:`.
+   - `helm template charts/k8s-driller --set oidc.clientIdRef.name=x --set oidc.clientIdRef.key=y` →
+     `DRILLER_OIDC_CLIENT_ID` is a `valueFrom.secretKeyRef`, and `oidc.clientId` is ignored.
 
 Report each numbered check as pass/fail with the offending output inline for any failure. Don't attempt to
 fix chart issues yourself unless explicitly asked — this skill's job is detection, not remediation.

@@ -376,7 +376,8 @@ termination assumed to be handled by the ingress/gateway layer, not the app itse
 ```yaml
 oidc:
   issuerUrl: ""
-  clientId: ""
+  clientId: ""          # ignored if clientIdRef.name is set — for a client ID that also lives in a Secret
+  clientIdRef: {name: "", key: ""}
   clientSecretRef: {name: "", key: ""}
   redirectUrl: ""
 adminBootstrapToken:

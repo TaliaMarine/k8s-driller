@@ -8,13 +8,26 @@ metadata:
     {{- include "k8s-driller.labels" . | nindent 4 }}
 spec:
   parentRefs:
-    - name: {{ .Values.ingress.gatewayApi.gatewayName }}
+    # group/kind explicit, matching exactly what the Gateway API CRD schema
+    # itself defaults them to server-side (+kubebuilder:default on
+    # ParentReference) when omitted. Leaving them out here rendered a
+    # manifest that differed from the live object forever after the first
+    # apply -- Argo CD (or any other diff-based GitOps tool) never stopped
+    # reporting OutOfSync for a field that was never actually wrong.
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.ingress.gatewayApi.gatewayName }}
       namespace: {{ .Values.ingress.gatewayApi.gatewayNamespace | default .Release.Namespace }}
       sectionName: {{ .Values.ingress.gatewayApi.sectionName }}
   hostnames:
     - {{ .Values.ingress.host | quote }}
   rules:
     - backendRefs:
-        - name: {{ include "k8s-driller.fullname" . }}
+        # Same reasoning as parentRefs above: group/kind/weight are exactly
+        # what BackendObjectReference/BackendRef default to server-side.
+        - group: ""
+          kind: Service
+          name: {{ include "k8s-driller.fullname" . }}
           port: {{ .Values.service.port }}
+          weight: 1
 {{- end }}

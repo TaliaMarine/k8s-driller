@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.2.1...v2.3.0) (2026-09-04)
+
+
+### Features
+
+* per-pod usage/request mini bars, node-wide over-request stat ([8a52693](https://github.com/TaliaMarine/k8s-driller/commit/8a526930d1e997855f7fc56bf022dd5dc107911a))
+
+
+### Bug Fixes
+
+* set HTTPRoute fields the Gateway API CRD schema server-defaults ([3187c7f](https://github.com/TaliaMarine/k8s-driller/commit/3187c7f5c450829718bb19d2278ebbc93bb2ca94))
+
 ## [2.2.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.2.0...v2.2.1) (2026-09-04)
 
 

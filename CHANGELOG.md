@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.4.0...v2.4.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* soften node severity signals, add filter dropdown and over-requests count ([5739b0a](https://github.com/TaliaMarine/k8s-driller/commit/5739b0a58027a5545c3acc887599515150553cf9))
+
 ## [2.4.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.3.0...v2.4.0) (2026-09-04)
 
 

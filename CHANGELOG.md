@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.3](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.2...v2.1.3) (2026-09-04)
+
+
+### Bug Fixes
+
+* eliminate an OIDC-login outage and make the chart GitOps-safe ([fb1c12f](https://github.com/TaliaMarine/k8s-driller/commit/fb1c12f7ed90438f2449eca7f7a78c8090554902))
+
 ## [2.1.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.1.1...v2.1.2) (2026-09-02)
 
 

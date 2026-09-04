@@ -30,6 +30,18 @@ function containerAllocation(
 
 // --- distribution chart: always reflects the whole node, independent of filters below ---
 
+const cpuUsageSegments = computed<DistSegment[]>(
+  () =>
+    pods.value
+      ?.map((p) => ({ key: podKey(p), name: p.name, value: p.usageCpu }))
+      .filter((s) => s.value > 0) ?? [],
+)
+const memUsageSegments = computed<DistSegment[]>(
+  () =>
+    pods.value
+      ?.map((p) => ({ key: podKey(p), name: p.name, value: p.usageMem }))
+      .filter((s) => s.value > 0) ?? [],
+)
 const cpuRequestSegments = computed<DistSegment[]>(
   () =>
     pods.value
@@ -201,6 +213,7 @@ const openPanels = ref<string[]>([])
         <NodeDistributionChart
           label="CPU"
           :capacity="node?.capacityCpu ?? 0"
+          :usage-segments="cpuUsageSegments"
           :request-segments="cpuRequestSegments"
           :limit-segments="cpuLimitSegments"
           :usage="cpuUsageTotal"
@@ -209,6 +222,7 @@ const openPanels = ref<string[]>([])
         <NodeDistributionChart
           label="Memory"
           :capacity="node?.capacityMemory ?? 0"
+          :usage-segments="memUsageSegments"
           :request-segments="memRequestSegments"
           :limit-segments="memLimitSegments"
           :usage="memUsageTotal"

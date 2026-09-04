@@ -13,6 +13,11 @@ drift here silently produces wrong signals cluster-wide.
 
 ## What to check against SPECS.md §9
 
+- **Active-pod filtering** — every per-node aggregation (`internal/api/compute.go`'s `activePods`) must
+  exclude `Succeeded`/`Failed` pods before summing anything, but must still include `Pending` (it already
+  holds its resource reservation before containers start). Check `buildNodeDTO` (allocation totals,
+  `PodCount`) and `buildNodePodDTOs` (the drilldown list) both apply this — a regression here silently
+  reappears as terminated Job/CronJob pods inflating a node's numbers.
 - **Node allocation %** — computed from the sum of pod requests/limits on the node divided by allocatable
   capacity, CPU and Memory tracked independently.
 - **Overcommit** — `Σ(pod limits) > node allocatable capacity`, evaluated per-resource independently (a

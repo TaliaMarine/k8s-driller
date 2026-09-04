@@ -407,6 +407,15 @@ with broken behavior.
 
 ## 9. Pressure & Recommendation Calculations (precise definitions)
 
+Every per-node calculation below sums over that node's **active** pods only — `Pending` and `Running`, not
+`Succeeded`/`Failed`. A terminal pod (a finished Job/CronJob run, most commonly) may still exist as an
+object until garbage collected, but the kubelet has already released whatever it was holding — counting it
+would inflate every allocation total, `PodCount`, and the drilldown pod list with pods that aren't actually
+there anymore. `Pending` is deliberately included: a pod holds its resource reservation from the moment
+it's scheduled/bound to a node, before its containers start, so excluding it would understate allocation
+exactly when it matters most — a burst of pods being scheduled at once. (`internal/api/compute.go`'s
+`activePods`.)
+
 - **Node allocation %** = `Σ(pod requests on node) / node allocatable capacity`, computed separately for
   limits.
 - **Overcommit** = `Σ(pod limits on node) > node allocatable capacity` (per resource, CPU and Memory

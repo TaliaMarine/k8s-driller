@@ -7,6 +7,32 @@ import (
 	"github.com/TaliaMarine/k8s-driller/internal/pressure"
 )
 
+// isTerminalPhase reports whether a pod has permanently stopped running —
+// Succeeded or Failed — and therefore no longer holds any resource
+// reservation on its node (the kubelet releases it once every container has
+// exited for good). Pending is deliberately NOT terminal here: a pod is
+// already counted against the node's allocatable capacity from the moment
+// it's scheduled/bound, before its containers actually start, so excluding
+// Pending would understate allocation exactly when it matters most — a
+// burst of pods being scheduled at once.
+func isTerminalPhase(phase string) bool {
+	return phase == "Succeeded" || phase == "Failed"
+}
+
+// activePods filters out terminal pods, e.g. a finished Job/CronJob pod
+// still lingering until garbage collection — it holds no resource
+// reservation and including it would double-count nothing but noise into
+// every node's allocation totals, PodCount, and the drilldown pod list.
+func activePods(pods []k8swatch.PodInfo) []k8swatch.PodInfo {
+	out := make([]k8swatch.PodInfo, 0, len(pods))
+	for _, p := range pods {
+		if !isTerminalPhase(p.Phase) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
 	alloc := pressure.AggregatePod(p.Containers)
 	usageCPU, usageMem, cpuHistory, _ := s.usage.PodUsage(p.Namespace, p.Name)
@@ -45,7 +71,7 @@ func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
 }
 
 func (s *Server) buildNodeDTO(n k8swatch.NodeInfo) NodeDTO {
-	pods := s.watch.PodsOnNode(n.Name)
+	pods := activePods(s.watch.PodsOnNode(n.Name))
 	allocations := make([]pressure.PodAllocation, 0, len(pods))
 	for _, p := range pods {
 		allocations = append(allocations, pressure.AggregatePod(p.Containers))
@@ -77,7 +103,7 @@ func (s *Server) buildNodeDTO(n k8swatch.NodeInfo) NodeDTO {
 // rendering, including which expansion panels stay open) reshuffles on
 // every single SSE push.
 func (s *Server) buildNodePodDTOs(nodeName string) []PodDTO {
-	pods := s.watch.PodsOnNode(nodeName)
+	pods := activePods(s.watch.PodsOnNode(nodeName))
 	sort.Slice(pods, func(i, j int) bool {
 		if pods[i].Namespace != pods[j].Namespace {
 			return pods[i].Namespace < pods[j].Namespace

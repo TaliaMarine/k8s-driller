@@ -13,6 +13,8 @@ export function nodeHealthColor(health: NodeHealth): string {
       return 'healthy'
     case 'Overcommit':
       return 'warning'
+    case 'Not Ready':
+      return 'watch'
     default:
       return 'critical'
   }

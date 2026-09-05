@@ -228,6 +228,20 @@ function exportForAI() {
                     <div class="text-body-1 mb-1">
                       Request {{ formatCpu(analysis.cpuRecommendation.recommendedRequest) }} · Limit
                       {{ formatCpu(analysis.cpuRecommendation.recommendedLimit) }}
+                      <span class="text-medium-emphasis">
+                        (now requests
+                        {{
+                          analysis.currentRequestCpu != null
+                            ? formatCpu(analysis.currentRequestCpu)
+                            : '—'
+                        }}
+                        limit
+                        {{
+                          analysis.currentLimitCpu != null
+                            ? formatCpu(analysis.currentLimitCpu)
+                            : '—'
+                        }})
+                      </span>
                     </div>
                     <div class="text-caption text-medium-emphasis">
                       {{ analysis.cpuRecommendation.rationale }}
@@ -242,6 +256,20 @@ function exportForAI() {
                     <div class="text-body-1 mb-1">
                       Request {{ formatMem(analysis.memRecommendation.recommendedRequest) }} · Limit
                       {{ formatMem(analysis.memRecommendation.recommendedLimit) }}
+                      <span class="text-medium-emphasis">
+                        (now requests
+                        {{
+                          analysis.currentRequestMem != null
+                            ? formatMem(analysis.currentRequestMem)
+                            : '—'
+                        }}
+                        limit
+                        {{
+                          analysis.currentLimitMem != null
+                            ? formatMem(analysis.currentLimitMem)
+                            : '—'
+                        }})
+                      </span>
                     </div>
                     <div class="text-caption text-medium-emphasis">
                       {{ analysis.memRecommendation.rationale }}

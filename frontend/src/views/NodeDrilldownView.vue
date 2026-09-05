@@ -233,6 +233,22 @@ const openPanels = ref<string[]>([])
         <v-expansion-panel v-for="pod in group.pods" :key="podKey(pod)" :value="podKey(pod)">
           <v-expansion-panel-title>
             <div class="d-flex align-center ga-2 flex-wrap pod-title">
+              <div class="d-flex flex-column ga-1 pod-usage-stack">
+                <MiniRatioBar
+                  label="C"
+                  :usage="pod.usageCpu"
+                  :requests="containerAllocation(pod, 'requestsCpu') || undefined"
+                  :limits="containerAllocation(pod, 'limitsCpu') || undefined"
+                  :format="formatCpu"
+                />
+                <MiniRatioBar
+                  label="M"
+                  :usage="pod.usageMem"
+                  :requests="containerAllocation(pod, 'requestsMem') || undefined"
+                  :limits="containerAllocation(pod, 'limitsMem') || undefined"
+                  :format="formatMem"
+                />
+              </div>
               <v-icon
                 v-if="pod.wildWest"
                 icon="mdi-alert-circle"
@@ -267,20 +283,6 @@ const openPanels = ref<string[]>([])
                 <v-icon start icon="mdi-arrow-up-bold" />
                 {{ highAllocationLabel(high) }}
               </v-chip>
-              <div class="d-flex align-center ga-2 ml-auto mini-ratio-group">
-                <MiniRatioBar
-                  label="C"
-                  :usage="pod.usageCpu"
-                  :request="containerAllocation(pod, 'requestsCpu') || undefined"
-                  :format="formatCpu"
-                />
-                <MiniRatioBar
-                  label="M"
-                  :usage="pod.usageMem"
-                  :request="containerAllocation(pod, 'requestsMem') || undefined"
-                  :format="formatMem"
-                />
-              </div>
             </div>
           </v-expansion-panel-title>
           <v-expansion-panel-text>
@@ -296,7 +298,7 @@ const openPanels = ref<string[]>([])
 .pod-title {
   min-width: 0;
 }
-.mini-ratio-group {
+.pod-usage-stack {
   flex-shrink: 0;
 }
 </style>

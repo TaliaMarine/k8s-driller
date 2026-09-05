@@ -132,16 +132,147 @@ type Recommendation struct {
 	Rationale          string `json:"rationale"`
 }
 
+// Plateau describes a sustained stretch of usage that sits significantly
+// above the series' own 90th percentile — e.g. a workload that jumped to a
+// new, higher steady-state and stayed there — which the mean/CV blend in
+// recommendRequest would otherwise under-recommend for, since it treats the
+// whole window as one distribution.
+type Plateau struct {
+	// Level is the mean usage while on the plateau.
+	Level float64
+	// Fraction is the share of the total observed time window spent on
+	// plateau (there can be more than one stretch).
+	Fraction float64
+}
+
+const (
+	// plateauAboveP90 is how far above p90 a stretch must sit to count as a
+	// plateau rather than ordinary noise just above the percentile.
+	plateauAboveP90 = 1.10
+	// plateauMinDuration is the minimum length of one contiguous stretch
+	// above threshold before it counts toward the plateau at all — a brief
+	// spike isn't a plateau, however high it goes.
+	plateauMinDuration = 2 * time.Hour
+	// plateauMinFraction is the minimum share of the total window that must
+	// be spent on plateau(s) before the recommender prefers the plateau
+	// level over the mean/p90 blend.
+	plateauMinFraction = 0.30
+)
+
+// DetectPlateau scans a timestamped series for a sustained step up to a new,
+// higher steady state. It works in three passes:
+//
+//  1. Mark contiguous stretches at or above the series' own p90 that last at
+//     least plateauMinDuration — candidates for "a new higher level", not a
+//     brief spike. (p90 alone isn't the bar for "significant": once a
+//     stretch covers more than ~10% of the series, it pulls the series' own
+//     p90 up into itself, so p90 can't be compared against directly.)
+//  2. Compare the candidate's level against the baseline p90 — the
+//     percentile of everything outside the candidate — and require it to be
+//     meaningfully higher. This is the real "significantly higher than
+//     p90" test, computed on the data the plateau would otherwise
+//     contaminate.
+//  3. Require the candidate to cover at least plateauMinFraction of the
+//     total window, so a rare event doesn't override the normal
+//     recommendation.
+//
+// timestamps and values must be the same length and timestamps ascending.
+func DetectPlateau(timestamps []time.Time, values []float64, p90 float64) (Plateau, bool) {
+	if len(timestamps) < 2 || len(timestamps) != len(values) || p90 <= 0 {
+		return Plateau{}, false
+	}
+	totalDuration := timestamps[len(timestamps)-1].Sub(timestamps[0])
+	if totalDuration <= 0 {
+		return Plateau{}, false
+	}
+
+	inPlateau := make([]bool, len(values))
+	var plateauDuration time.Duration
+	runStart := -1
+	markRun := func(end int) {
+		if runStart < 0 {
+			return
+		}
+		if dur := timestamps[end].Sub(timestamps[runStart]); dur >= plateauMinDuration {
+			plateauDuration += dur
+			for i := runStart; i <= end; i++ {
+				inPlateau[i] = true
+			}
+		}
+		runStart = -1
+	}
+	for i, v := range values {
+		if v >= p90 {
+			if runStart < 0 {
+				runStart = i
+			}
+		} else {
+			markRun(i - 1)
+		}
+	}
+	markRun(len(values) - 1)
+
+	var plateauValues, baselineValues []float64
+	for i, v := range values {
+		if inPlateau[i] {
+			plateauValues = append(plateauValues, v)
+		} else {
+			baselineValues = append(baselineValues, v)
+		}
+	}
+	// No baseline left to compare against (the whole series qualified as
+	// one candidate stretch) means there's nothing to be "significantly
+	// higher" than.
+	if len(plateauValues) == 0 || len(baselineValues) == 0 {
+		return Plateau{}, false
+	}
+
+	baselineP90 := Compute(baselineValues).P90
+	plateauLevel := mean(plateauValues)
+	if baselineP90 <= 0 || plateauLevel < baselineP90*plateauAboveP90 {
+		return Plateau{}, false
+	}
+
+	fraction := float64(plateauDuration) / float64(totalDuration)
+	if fraction < plateauMinFraction {
+		return Plateau{}, false
+	}
+	return Plateau{Level: plateauLevel, Fraction: fraction}, true
+}
+
+func mean(values []float64) float64 {
+	var sum float64
+	for _, v := range values {
+		sum += v
+	}
+	return sum / float64(len(values))
+}
+
 // recommendRequest blends the mean and the 90th percentile by how variable
 // the series is: a flat series (CV≈0) recommends close to the mean, while a
 // bursty or bimodal one — long idle stretches plus real active periods,
 // which drag the mean down without lowering actual peak needs — leans
 // toward the 90th percentile instead ("lean towards the higher ground, not
 // just the average"). headroomPct then adds a flat safety floor on top.
-func recommendRequest(s Stats, headroomPct float64) (float64, string) {
+//
+// Before falling back to that blend, it checks for a sustained plateau
+// (see DetectPlateau) — a workload that spends a large share of the window
+// meaningfully above its own p90 wants the recommendation anchored to that
+// plateau, not diluted by whatever it was doing the rest of the time.
+func recommendRequest(s Stats, headroomPct float64, timestamps []time.Time, values []float64) (float64, string) {
 	if s.Mean <= 0 {
 		return 0, "no usage observed in this window"
 	}
+
+	if plateau, ok := DetectPlateau(timestamps, values, s.P90); ok {
+		request := plateau.Level * (1 + headroomPct/100)
+		reason := fmt.Sprintf(
+			"usage holds a sustained plateau around %.0f for %.0f%% of the observed window — well above the 90th percentile (%.0f) — so the recommendation targets that plateau instead of the mean/percentile blend",
+			plateau.Level, plateau.Fraction*100, s.P90,
+		)
+		return request, reason
+	}
+
 	weight := s.CV * 2
 	if weight > 1 {
 		weight = 1
@@ -179,9 +310,10 @@ func round(v float64) int64 {
 // RecommendCPU derives a CPU request/limit recommendation from raw usage
 // Stats (no peak-bucketing — CPU is compressible and naturally noisy, so a
 // percentile of continuous samples already captures burstiness; only
-// memory gets the peak-bucket treatment, per VPA).
-func RecommendCPU(raw Stats, headroomPct, limitMultiplier float64) Recommendation {
-	req, reason := recommendRequest(raw, headroomPct)
+// memory gets the peak-bucket treatment, per VPA). timestamps/values are
+// the same raw series raw was computed from, used for plateau detection.
+func RecommendCPU(raw Stats, timestamps []time.Time, values []float64, headroomPct, limitMultiplier float64) Recommendation {
+	req, reason := recommendRequest(raw, headroomPct, timestamps, values)
 	limit := req * limitMultiplier
 	// A burst that spikes past p99 should still fit under the limit even if
 	// the multiplier alone wouldn't cover it.
@@ -199,9 +331,12 @@ func RecommendCPU(raw Stats, headroomPct, limitMultiplier float64) Recommendatio
 // peak-bucketed Stats (see PeakBucket). Memory gets extra headroom beyond
 // the configured floor because under-provisioning risks an OOM-kill —
 // unrecoverable — where CPU under-provisioning only causes recoverable
-// throttling.
-func RecommendMemory(peaks Stats, headroomPct, limitMultiplier float64) Recommendation {
-	req, reason := recommendRequest(peaks, headroomPct*1.5)
+// throttling. timestamps/values are the raw (non-bucketed) usage series,
+// used for plateau detection — memory sitting continuously near its
+// ceiling for hours is exactly the plateau shape peak-bucketing alone
+// would smooth over.
+func RecommendMemory(peaks Stats, timestamps []time.Time, values []float64, headroomPct, limitMultiplier float64) Recommendation {
+	req, reason := recommendRequest(peaks, headroomPct*1.5, timestamps, values)
 	limit := req * limitMultiplier
 	// The limit must cover the single worst observed peak, not just a
 	// multiple of the (already conservative) recommended request.

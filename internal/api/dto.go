@@ -16,6 +16,7 @@ const (
 	NodeCPUPressure = "CPU Pressure"
 	NodeMemPressure = "Mem Pressure"
 	NodeOvercommit  = "Overcommit"
+	NodeNotReady    = "Not Ready"
 )
 
 // ContainerDTO is one container's configured resources, live usage share,
@@ -83,8 +84,15 @@ type ClusterSummaryDTO struct {
 // limit) so a node that's both shows the more urgent signal. See
 // nodeHealthColor's severity mapping on the frontend for the other half of
 // this: Overcommit reads as warning, CPU/Mem Pressure as critical.
-func nodeHealth(p pressure.NodePressure) string {
+//
+// A node that isn't Ready reports stale/absent metrics rather than an
+// actual pressure state, so Not Ready is checked first and short-circuits
+// the rest — a NotReady node should never be labeled Healthy just because
+// its last-known pressure numbers looked fine.
+func nodeHealth(ready bool, p pressure.NodePressure) string {
 	switch {
+	case !ready:
+		return NodeNotReady
 	case p.LiveMemPct > nodeLivePressureThresholdPct:
 		return NodeMemPressure
 	case p.LiveCPUPct > nodeLivePressureThresholdPct:

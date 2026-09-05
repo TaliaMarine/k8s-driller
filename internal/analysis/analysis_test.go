@@ -69,7 +69,7 @@ func TestPeakBucket(t *testing.T) {
 
 func TestRecommendRequestStableLeansToMean(t *testing.T) {
 	stable := Compute([]float64{100, 102, 98, 101, 99, 100})
-	req, _ := recommendRequest(stable, 10)
+	req, _ := recommendRequest(stable, 10, nil, nil)
 	// Low CV: request should stay close to mean*(1+10%), not jump to p90.
 	if req > stable.Mean*1.2 {
 		t.Fatalf("expected stable-series request close to mean, got %v (mean %v)", req, stable.Mean)
@@ -87,7 +87,7 @@ func TestRecommendRequestBimodalLeansHigh(t *testing.T) {
 		samples = append(samples, 1000)
 	}
 	bimodal := Compute(samples)
-	req, reason := recommendRequest(bimodal, 10)
+	req, reason := recommendRequest(bimodal, 10, nil, nil)
 	if req <= bimodal.Mean*1.5 {
 		t.Fatalf("expected bimodal request to lean well above the mean (%v), got %v", bimodal.Mean, req)
 	}
@@ -106,7 +106,7 @@ func TestRecommendCPULimitCoversP99(t *testing.T) {
 	samples = append(samples, 5000)
 	stats := Compute(samples)
 
-	rec := RecommendCPU(stats, 10, 2.0)
+	rec := RecommendCPU(stats, nil, nil, 10, 2.0)
 	if float64(rec.RecommendedLimit) < stats.P99 {
 		t.Fatalf("expected limit (%d) to cover p99 (%v)", rec.RecommendedLimit, stats.P99)
 	}
@@ -114,7 +114,7 @@ func TestRecommendCPULimitCoversP99(t *testing.T) {
 
 func TestRecommendMemoryLimitCoversPeak(t *testing.T) {
 	stats := Compute([]float64{100, 110, 90, 105, 500})
-	rec := RecommendMemory(stats, 10, 1.5)
+	rec := RecommendMemory(stats, nil, nil, 10, 1.5)
 	if float64(rec.RecommendedLimit) < stats.Max {
 		t.Fatalf("expected memory limit (%d) to cover the observed peak (%v)", rec.RecommendedLimit, stats.Max)
 	}
@@ -133,7 +133,7 @@ func TestRecommendSubUnitRequestFloorsToOne(t *testing.T) {
 	samples = append(samples, 40, 42)
 	stats := Compute(samples)
 
-	rec := RecommendCPU(stats, 10, 2.0)
+	rec := RecommendCPU(stats, nil, nil, 10, 2.0)
 	if rec.RecommendedRequest < 1 {
 		t.Fatalf("expected a positive sub-1 target to floor to at least 1, got %d", rec.RecommendedRequest)
 	}
@@ -141,8 +141,78 @@ func TestRecommendSubUnitRequestFloorsToOne(t *testing.T) {
 
 func TestRecommendZeroUsage(t *testing.T) {
 	stats := Compute([]float64{0, 0, 0})
-	rec := RecommendCPU(stats, 10, 2.0)
+	rec := RecommendCPU(stats, nil, nil, 10, 2.0)
 	if rec.RecommendedRequest != 0 || rec.RecommendedLimit != 0 {
 		t.Fatalf("expected zero recommendation for zero usage, got %+v", rec)
+	}
+}
+
+func TestDetectPlateauFindsSustainedHighStretch(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// 10 hours idle at 10, then 10 hours at a sustained plateau of 200
+	// (50% of the window), on a 15-minute step.
+	var timestamps []time.Time
+	var values []float64
+	step := 15 * time.Minute
+	for i := 0; i < 40; i++ {
+		timestamps = append(timestamps, base.Add(time.Duration(i)*step))
+		values = append(values, 10)
+	}
+	for i := 40; i < 80; i++ {
+		timestamps = append(timestamps, base.Add(time.Duration(i)*step))
+		values = append(values, 200)
+	}
+	stats := Compute(values)
+
+	plateau, ok := DetectPlateau(timestamps, values, stats.P90)
+	if !ok {
+		t.Fatalf("expected a plateau to be detected")
+	}
+	if plateau.Level < 190 || plateau.Level > 210 {
+		t.Fatalf("expected plateau level near 200, got %v", plateau.Level)
+	}
+	if plateau.Fraction < 0.3 {
+		t.Fatalf("expected plateau fraction >= 0.3, got %v", plateau.Fraction)
+	}
+}
+
+func TestDetectPlateauIgnoresBriefSpike(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var timestamps []time.Time
+	var values []float64
+	step := 15 * time.Minute
+	for i := 0; i < 100; i++ {
+		timestamps = append(timestamps, base.Add(time.Duration(i)*step))
+		values = append(values, 10)
+	}
+	// One brief spike, well under plateauMinDuration.
+	values[50] = 500
+	stats := Compute(values)
+
+	if _, ok := DetectPlateau(timestamps, values, stats.P90); ok {
+		t.Fatalf("expected a brief spike not to register as a plateau")
+	}
+}
+
+func TestRecommendCPUPrefersPlateauOverBlend(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var timestamps []time.Time
+	var values []float64
+	step := 15 * time.Minute
+	for i := 0; i < 40; i++ {
+		timestamps = append(timestamps, base.Add(time.Duration(i)*step))
+		values = append(values, 10)
+	}
+	for i := 40; i < 80; i++ {
+		timestamps = append(timestamps, base.Add(time.Duration(i)*step))
+		values = append(values, 200)
+	}
+	stats := Compute(values)
+
+	rec := RecommendCPU(stats, timestamps, values, 10, 2.0)
+	// The mean/p90 blend alone would land well under 200; the plateau
+	// should push the recommendation up near it instead.
+	if rec.RecommendedRequest < 190 {
+		t.Fatalf("expected plateau-driven request near 200, got %d", rec.RecommendedRequest)
 	}
 }

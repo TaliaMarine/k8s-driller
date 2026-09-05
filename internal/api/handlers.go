@@ -248,8 +248,8 @@ func (s *Server) handlePodAnalysis(w http.ResponseWriter, r *http.Request) {
 		limitMem = &v
 	}
 
-	cpuRec := analysis.RecommendCPU(cpuStats, s.pressure.RecommendationHeadroomPct, s.pressure.CPULimitMultiplier)
-	memRec := analysis.RecommendMemory(memPeakStats, s.pressure.RecommendationHeadroomPct, s.pressure.MemLimitMultiplier)
+	cpuRec := analysis.RecommendCPU(cpuStats, sampleTimestamps(cpuSamples), sampleValues(cpuSamples), s.pressure.RecommendationHeadroomPct, s.pressure.CPULimitMultiplier)
+	memRec := analysis.RecommendMemory(memPeakStats, sampleTimestamps(memSamples), sampleValues(memSamples), s.pressure.RecommendationHeadroomPct, s.pressure.MemLimitMultiplier)
 
 	wasteful := s.pressure.Wasteful(int64(cpuStats.P95), reqCPU) || s.pressure.Wasteful(int64(memStats.P95), reqMem)
 	underProvisioned := (reqCPU != nil && cpuRec.RecommendedRequest > int64(float64(*reqCPU)*1.2)) ||

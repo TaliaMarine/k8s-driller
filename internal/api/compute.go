@@ -112,7 +112,7 @@ func (s *Server) buildNodeDTO(n k8swatch.NodeInfo) NodeDTO {
 		CapacityCPU:      n.Capacity.CPU,
 		CapacityMemory:   n.Capacity.Memory,
 		Pressure:         p,
-		Health:           nodeHealth(p),
+		Health:           nodeHealth(n.Ready, p),
 		PodCount:         len(pods),
 		PodsOverRequests: overRequests,
 	}

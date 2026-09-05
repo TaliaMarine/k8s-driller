@@ -13,7 +13,7 @@ export interface NodePressure {
   overcommitMem: boolean
 }
 
-export type NodeHealth = 'Healthy' | 'CPU Pressure' | 'Mem Pressure' | 'Overcommit'
+export type NodeHealth = 'Healthy' | 'CPU Pressure' | 'Mem Pressure' | 'Overcommit' | 'Not Ready'
 
 export interface NodeDTO {
   name: string

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 const props = defineProps<{
   label: string
+  icon: string
   usage: number
   requests?: number
   limits?: number
@@ -36,10 +37,13 @@ const markerPct = computed(() =>
     : null,
 )
 
+// Orange once usage clears the requests reference point (real or the
+// synthetic half-limit stand-in); red once it's within 10% of the ceiling
+// the bar is scaled against, regardless of how far past requests that is.
 const color = computed(() => {
   if (ratio.value === null) return 'healthy'
-  if (ratio.value >= 1) return 'critical'
-  if (ratio.value >= 0.9) return 'warning'
+  if (ratio.value >= 0.9) return 'critical'
+  if (effectiveRequests.value != null && props.usage > effectiveRequests.value) return 'warning'
   return 'healthy'
 })
 
@@ -52,7 +56,7 @@ const tooltip = computed(() => {
 
 <template>
   <div class="mini-ratio-bar" :title="tooltip">
-    <span class="mini-ratio-label">{{ label }}</span>
+    <v-icon :icon="icon" size="12" class="mini-ratio-icon" />
     <div v-if="hasBar" class="mini-ratio-track">
       <div class="mini-ratio-fill" :class="`bg-${color}`" :style="{ width: `${widthPct}%` }" />
       <div v-if="markerPct != null" class="mini-ratio-marker" :style="{ left: `${markerPct}%` }" />
@@ -67,12 +71,9 @@ const tooltip = computed(() => {
   align-items: center;
   gap: 3px;
 }
-.mini-ratio-label {
-  font-size: 10px;
-  line-height: 1;
-  width: 10px;
-  color: rgb(var(--v-theme-on-surface));
+.mini-ratio-icon {
   opacity: 0.6;
+  flex-shrink: 0;
 }
 .mini-ratio-track {
   position: relative;

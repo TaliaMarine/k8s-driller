@@ -96,15 +96,21 @@ export function highAllocationTooltip(high: HighAllocation): string {
   return `${name} request/limit is ${high.ratio.toFixed(1)}x the ${unit} sanity threshold — likely a misconfigured value`
 }
 
+// Collapsed to at most two chips — "request(s)" and/or "limit(s)" — with no
+// CPU/Mem distinction, since the filters dropdown (FILTER_OPTIONS) already
+// covers that granularity; the row chip is just a "something's missing"
+// flag.
 export function missingChips(pod: PodDTO): string[] {
-  const chips = new Set<string>()
-  for (const c of pod.containers) {
-    if (c.wildWest.missingRequestsCpu) chips.add('CPU request')
-    if (c.wildWest.missingRequestsMem) chips.add('Mem request')
-    if (c.wildWest.missingLimitsCpu) chips.add('CPU limit')
-    if (c.wildWest.missingLimitsMem) chips.add('Mem limit')
-  }
-  return [...chips]
+  const missingRequests = pod.containers.some(
+    (c) => c.wildWest.missingRequestsCpu || c.wildWest.missingRequestsMem,
+  )
+  const missingLimits = pod.containers.some(
+    (c) => c.wildWest.missingLimitsCpu || c.wildWest.missingLimitsMem,
+  )
+  const chips: string[] = []
+  if (missingRequests) chips.push('request(s)')
+  if (missingLimits) chips.push('limit(s)')
+  return chips
 }
 
 function hasMissing(pod: PodDTO, field: keyof PodDTO['containers'][number]['wildWest']): boolean {

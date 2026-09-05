@@ -153,14 +153,16 @@ const openPanels = ref<string[]>([])
             <div class="d-flex align-center ga-2 flex-wrap pod-title">
               <div class="d-flex flex-column ga-1 pod-usage-stack">
                 <MiniRatioBar
-                  label="C"
+                  label="CPU"
+                  icon="mdi-cpu-64-bit"
                   :usage="pod.usageCpu"
                   :requests="containerAllocation(pod, 'requestsCpu') || undefined"
                   :limits="containerAllocation(pod, 'limitsCpu') || undefined"
                   :format="formatCpu"
                 />
                 <MiniRatioBar
-                  label="M"
+                  label="Memory"
+                  icon="mdi-memory"
                   :usage="pod.usageMem"
                   :requests="containerAllocation(pod, 'requestsMem') || undefined"
                   :limits="containerAllocation(pod, 'limitsMem') || undefined"
@@ -224,6 +226,7 @@ const openPanels = ref<string[]>([])
 <style scoped>
 .pod-title {
   min-width: 0;
+  flex: 1 1 auto;
 }
 .workload-row-end {
   flex-shrink: 0;

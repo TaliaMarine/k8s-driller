@@ -3,59 +3,44 @@ import { computed } from 'vue'
 
 const props = defineProps<{
   label: string
-  allocationPct: number // Layer A: configured requests/limits vs capacity (SPECS.md §2.1)
-  livePct: number // Layer B: real-time usage, overlaid on Layer A
-  overcommit?: boolean
+  usage: number
+  capacity: number
+  // CPU reads as a plain percentage of capacity; memory reads as an
+  // absolute usage/capacity pair (SPECS.md-style Ki/Mi/Gi units), since a
+  // bare "42%" doesn't tell you whether that's 4GiB of 10GiB or 40GiB of
+  // 100GiB — a distinction that matters for memory sizing decisions.
+  unit: 'pct' | 'absolute'
+  format?: (v: number) => string
 }>()
 
-// Live severity and overcommit are two different questions — "is usage
-// actually a problem right now" vs. "could the config become a problem" —
-// so they get two separate signals instead of overcommit forcing the live
-// bar to critical regardless of actual usage. Live: healthy/warning/critical
-// by usage alone. Allocation (below): grey normally, warning when
-// overcommitted.
-const liveColor = computed(() => {
-  if (props.livePct > 90) return 'critical'
-  if (props.livePct > 75) return 'warning'
+const pct = computed(() => (props.capacity > 0 ? (props.usage / props.capacity) * 100 : 0))
+const widthPct = computed(() => Math.min(pct.value, 100))
+
+const color = computed(() => {
+  if (pct.value >= 100) return 'critical'
+  if (pct.value >= 90) return 'warning'
   return 'healthy'
 })
-const allocationColor = computed(() => (props.overcommit ? 'warning' : 'grey'))
+
+const displayValue = computed(() =>
+  props.unit === 'pct'
+    ? `${Math.round(pct.value)}%`
+    : `${props.format!(props.usage)} / ${props.format!(props.capacity)}`,
+)
 </script>
 
 <template>
   <div class="resource-bar mb-2">
     <div class="d-flex justify-space-between text-caption mb-1">
       <span>{{ label }}</span>
-      <span>{{ Math.round(livePct) }}% live / {{ Math.round(allocationPct) }}% allocated</span>
+      <span>{{ displayValue }}</span>
     </div>
-    <div class="bar-stack">
-      <v-progress-linear
-        :model-value="Math.min(allocationPct, 100)"
-        height="14"
-        :color="allocationColor"
-        bg-color="surface-variant"
-        rounded
-      />
-      <v-progress-linear
-        :model-value="Math.min(livePct, 100)"
-        height="14"
-        :color="liveColor"
-        class="bar-overlay"
-        rounded
-      />
-    </div>
+    <v-progress-linear
+      :model-value="widthPct"
+      height="14"
+      :color="color"
+      bg-color="surface-variant"
+      rounded
+    />
   </div>
 </template>
-
-<style scoped>
-.bar-stack {
-  position: relative;
-}
-.bar-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  opacity: 0.85;
-}
-</style>

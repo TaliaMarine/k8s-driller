@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.5.2...v2.6.0) (2026-09-05)
+
+
+### Features
+
+* show Unschedulable instead of Healthy for cordoned nodes ([aa71478](https://github.com/TaliaMarine/k8s-driller/commit/aa71478b67c3c7913ba5547e4c31426944aa38f5))
+
 ## [2.5.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.5.1...v2.5.2) (2026-09-05)
 
 

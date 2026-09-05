@@ -32,7 +32,9 @@ const {
   search,
   namespaceFilter,
   activeFilters,
+  includeKubeSystem,
   namespaceOptions,
+  scopedPods,
   filteredPods,
   groups,
   clearFilters,
@@ -104,7 +106,7 @@ const openPanels = ref<string[]>([])
       <div>
         <h1 class="text-h6 mb-0">{{ name }}</h1>
         <div class="text-caption text-medium-emphasis">
-          {{ node?.podCount ?? pods?.length ?? 0 }} pods
+          {{ node?.podCount ?? scopedPods.length }} pods
           <template v-if="node">· {{ node.ready ? 'Ready' : 'Not Ready' }}</template>
         </div>
       </div>
@@ -124,7 +126,7 @@ const openPanels = ref<string[]>([])
         size="small"
       >
         <v-icon v-if="overCpuRequestCount > 0" start icon="mdi-alert" />
-        {{ overCpuRequestCount }} / {{ pods?.length ?? 0 }} pods over CPU request
+        {{ overCpuRequestCount }} / {{ scopedPods.length }} pods over CPU request
       </v-chip>
       <v-chip
         :color="overMemRequestCount > 0 ? 'critical' : 'healthy'"
@@ -132,7 +134,7 @@ const openPanels = ref<string[]>([])
         size="small"
       >
         <v-icon v-if="overMemRequestCount > 0" start icon="mdi-alert" />
-        {{ overMemRequestCount }} / {{ pods?.length ?? 0 }} pods over memory request
+        {{ overMemRequestCount }} / {{ scopedPods.length }} pods over memory request
       </v-chip>
     </div>
 
@@ -205,9 +207,17 @@ const openPanels = ref<string[]>([])
             </v-list-item>
           </template>
         </v-select>
+        <v-switch
+          v-model="includeKubeSystem"
+          label="kube-system"
+          color="watch"
+          density="compact"
+          hide-details
+          inset
+        />
         <v-spacer />
         <span class="text-caption text-medium-emphasis"
-          >{{ filteredPods.length }} / {{ pods?.length ?? 0 }} pods</span
+          >{{ filteredPods.length }} / {{ scopedPods.length }} pods</span
         >
         <v-btn v-if="filtersActive" size="small" variant="text" @click="clearFilters"
           >Clear filters</v-btn

@@ -146,21 +146,29 @@ export function usePodFilters(pods: Ref<PodDTO[] | null | undefined>) {
   const search = ref('')
   const namespaceFilter = ref<string | null>(null)
   const activeFilters = ref<string[]>([])
+  // kube-system is noisy on most clusters (many small system pods that
+  // aren't what someone drilling into workload pressure usually cares
+  // about), so it's hidden by default and only a deliberate toggle away.
+  const includeKubeSystem = ref(false)
+
+  const scopedPods = computed(() =>
+    (pods.value ?? []).filter((p) => includeKubeSystem.value || p.namespace !== 'kube-system'),
+  )
 
   const namespaceOptions = computed(() =>
-    [...new Set((pods.value ?? []).map((p) => p.namespace))].sort(),
+    [...new Set(scopedPods.value.map((p) => p.namespace))].sort(),
   )
 
   const overCpuRequestCount = computed(
-    () => (pods.value ?? []).filter((p) => isOverRequest(p, 'cpu')).length,
+    () => scopedPods.value.filter((p) => isOverRequest(p, 'cpu')).length,
   )
   const overMemRequestCount = computed(
-    () => (pods.value ?? []).filter((p) => isOverRequest(p, 'mem')).length,
+    () => scopedPods.value.filter((p) => isOverRequest(p, 'mem')).length,
   )
 
   const filteredPods = computed(() => {
     const term = search.value.trim().toLowerCase()
-    return (pods.value ?? []).filter((pod) => {
+    return scopedPods.value.filter((pod) => {
       if (term && !pod.name.toLowerCase().includes(term)) return false
       if (namespaceFilter.value && pod.namespace !== namespaceFilter.value) return false
       return activeFilters.value.every((f) => matchesFilter(pod, f))
@@ -208,7 +216,9 @@ export function usePodFilters(pods: Ref<PodDTO[] | null | undefined>) {
     search,
     namespaceFilter,
     activeFilters,
+    includeKubeSystem,
     namespaceOptions,
+    scopedPods,
     filteredPods,
     groups,
     clearFilters,

@@ -8,14 +8,10 @@ import { formatCpu, formatMem, nodeHealthColor } from '@/utils/format'
 import {
   containerAllocation,
   FILTER_OPTIONS,
-  highAllocationLabel,
-  highAllocations,
-  highAllocationTooltip,
-  missingChips,
   podKey,
   usePodFilters,
 } from '@/composables/usePodFilters'
-import MiniRatioBar from '@/components/MiniRatioBar.vue'
+import PodRow from '@/components/PodRow.vue'
 import PodDetailPanel from '@/components/PodDetailPanel.vue'
 import NodeDistributionChart from '@/components/NodeDistributionChart.vue'
 import type { DistSegment } from '@/components/NodeDistributionChart.vue'
@@ -242,60 +238,7 @@ const openPanels = ref<string[]>([])
       <v-expansion-panels v-model="openPanels" multiple variant="accordion">
         <v-expansion-panel v-for="pod in group.pods" :key="podKey(pod)" :value="podKey(pod)">
           <v-expansion-panel-title>
-            <div class="d-flex align-center ga-2 flex-wrap pod-title">
-              <div class="d-flex flex-column ga-1 pod-usage-stack">
-                <MiniRatioBar
-                  label="CPU"
-                  icon="mdi-cpu-64-bit"
-                  :usage="pod.usageCpu"
-                  :requests="containerAllocation(pod, 'requestsCpu') || undefined"
-                  :limits="containerAllocation(pod, 'limitsCpu') || undefined"
-                  :format="formatCpu"
-                />
-                <MiniRatioBar
-                  label="Memory"
-                  icon="mdi-memory"
-                  :usage="pod.usageMem"
-                  :requests="containerAllocation(pod, 'requestsMem') || undefined"
-                  :limits="containerAllocation(pod, 'limitsMem') || undefined"
-                  :format="formatMem"
-                />
-              </div>
-              <v-icon
-                v-if="pod.wildWest"
-                icon="mdi-alert-circle"
-                color="wildwest"
-                size="small"
-                title="Missing resource configuration"
-              />
-              <span class="font-weight-medium">{{ pod.name }}</span>
-              <v-chip v-if="pod.oomRisk" color="critical" size="small" variant="flat"
-                >OOM-Risk</v-chip
-              >
-              <v-chip v-if="pod.throttlingRisk" color="warning" size="small" variant="flat"
-                >Throttling-Risk</v-chip
-              >
-              <v-chip
-                v-for="chip in missingChips(pod)"
-                :key="chip"
-                color="wildwest"
-                size="small"
-                variant="outlined"
-              >
-                Missing {{ chip }}
-              </v-chip>
-              <v-chip
-                v-for="high in highAllocations(pod)"
-                :key="high.resource"
-                color="warning"
-                size="small"
-                variant="flat"
-                :title="highAllocationTooltip(high)"
-              >
-                <v-icon start icon="mdi-arrow-up-bold" />
-                {{ highAllocationLabel(high) }}
-              </v-chip>
-            </div>
+            <PodRow :pod="pod" />
           </v-expansion-panel-title>
           <v-expansion-panel-text>
             <PodDetailPanel :pod="pod" />
@@ -305,12 +248,3 @@ const openPanels = ref<string[]>([])
     </v-card>
   </v-container>
 </template>
-
-<style scoped>
-.pod-title {
-  min-width: 0;
-}
-.pod-usage-stack {
-  flex-shrink: 0;
-}
-</style>

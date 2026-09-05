@@ -16,6 +16,9 @@ const vuetifyTheme = useTheme()
 
 const isNodesActive = computed(() => route.name === 'dashboard' || route.name === 'node-drilldown')
 const isWorkloadsActive = computed(() => route.name === 'workloads')
+const isNamespacesActive = computed(
+  () => route.name === 'namespaces' || route.name === 'namespace-drilldown',
+)
 
 watchEffect(() => {
   vuetifyTheme.global.name.value = themeStore.name
@@ -65,6 +68,14 @@ async function logout() {
             prepend-icon="mdi-cube-outline"
           >
             Workloads
+          </v-btn>
+          <v-btn
+            :variant="isNamespacesActive ? 'tonal' : 'text'"
+            :color="isNamespacesActive ? 'watch' : undefined"
+            :to="{ name: 'namespaces' }"
+            prepend-icon="mdi-folder-outline"
+          >
+            Namespaces
           </v-btn>
         </div>
 

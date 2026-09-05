@@ -5,7 +5,10 @@ const props = defineProps<{
   usage: number
   requests: number
   limits: number
-  capacity: number
+  // Omitted (or 0) when there's no natural ceiling to mark — e.g. a
+  // namespace summary, which has no capacity of its own — in which case no
+  // marker renders at all rather than a misleading one sitting at 0%.
+  capacity?: number
   format: (v: number) => string
 }>()
 
@@ -13,18 +16,21 @@ const props = defineProps<{
 // overcommitted node (limits sum > capacity) is visible as the capacity
 // marker sitting inside the bar rather than at its far edge, instead of
 // clipping the limits bar to 100% and hiding the overcommit.
-const max = computed(() => Math.max(props.usage, props.requests, props.limits, props.capacity, 1))
+const hasCapacity = computed(() => !!props.capacity && props.capacity > 0)
+const max = computed(() =>
+  Math.max(props.usage, props.requests, props.limits, props.capacity ?? 0, 1),
+)
 const scale = (v: number) => Math.min((v / max.value) * 100, 100)
 
 const usagePct = computed(() => scale(props.usage))
 const requestsPct = computed(() => scale(props.requests))
 const limitsPct = computed(() => scale(props.limits))
-const capacityPct = computed(() => scale(props.capacity))
+const capacityPct = computed(() => (hasCapacity.value ? scale(props.capacity!) : 0))
 
 const usageColor = computed(() => {
-  if (props.capacity <= 0) return 'healthy'
-  if (props.usage >= props.capacity) return 'critical'
-  if (props.usage >= props.capacity * 0.9) return 'warning'
+  if (!hasCapacity.value) return 'healthy'
+  if (props.usage >= props.capacity!) return 'critical'
+  if (props.usage >= props.capacity! * 0.9) return 'warning'
   return 'healthy'
 })
 </script>
@@ -54,9 +60,10 @@ const usageColor = computed(() => {
         rounded
       />
       <div
+        v-if="hasCapacity"
         class="capacity-marker"
         :style="{ left: `${capacityPct}%` }"
-        :title="`Capacity: ${format(capacity)}`"
+        :title="`Capacity: ${format(capacity!)}`"
       />
     </div>
     <div class="d-flex ga-3 text-caption text-medium-emphasis mt-1">

@@ -113,6 +113,60 @@ export function missingChips(pod: PodDTO): string[] {
   return chips
 }
 
+export interface ResourceAggregate {
+  usageCpu: number
+  usageMem: number
+  requestsCpu: number
+  requestsMem: number
+  limitsCpu: number
+  limitsMem: number
+}
+
+function emptyAggregate(): ResourceAggregate {
+  return { usageCpu: 0, usageMem: 0, requestsCpu: 0, requestsMem: 0, limitsCpu: 0, limitsMem: 0 }
+}
+
+function addPod(agg: ResourceAggregate, pod: PodDTO) {
+  agg.usageCpu += pod.usageCpu
+  agg.usageMem += pod.usageMem
+  agg.requestsCpu += containerAllocation(pod, 'requestsCpu')
+  agg.requestsMem += containerAllocation(pod, 'requestsMem')
+  agg.limitsCpu += containerAllocation(pod, 'limitsCpu')
+  agg.limitsMem += containerAllocation(pod, 'limitsMem')
+}
+
+// Cluster-wide usage/requests/limits sum across every given pod — the
+// backend's cluster summary only carries requests/live as percentages (no
+// limits total), so this is computed client-side from the same pod list
+// the lists already stream.
+export function totalAggregate(pods: PodDTO[]): ResourceAggregate {
+  const agg = emptyAggregate()
+  for (const pod of pods) addPod(agg, pod)
+  return agg
+}
+
+export interface NamespaceAggregate extends ResourceAggregate {
+  namespace: string
+  podCount: number
+}
+
+// Per-namespace usage/requests/limits sums, sorted by namespace name — the
+// raw material for both the Namespaces page's distribution charts and its
+// per-namespace summary cards.
+export function namespaceAggregates(pods: PodDTO[]): NamespaceAggregate[] {
+  const byNamespace = new Map<string, NamespaceAggregate>()
+  for (const pod of pods) {
+    let agg = byNamespace.get(pod.namespace)
+    if (!agg) {
+      agg = { namespace: pod.namespace, podCount: 0, ...emptyAggregate() }
+      byNamespace.set(pod.namespace, agg)
+    }
+    agg.podCount++
+    addPod(agg, pod)
+  }
+  return [...byNamespace.values()].sort((a, b) => a.namespace.localeCompare(b.namespace))
+}
+
 function hasMissing(pod: PodDTO, field: keyof PodDTO['containers'][number]['wildWest']): boolean {
   return pod.containers.some((c) => c.wildWest[field])
 }

@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEventSource } from '@/composables/useEventSource'
-import { useClusterStore } from '@/stores/cluster'
 import type { PodDTO } from '@/types/api'
 import { formatCpu, formatMem } from '@/utils/format'
 import { FILTER_OPTIONS, podKey, totalAggregate, usePodFilters } from '@/composables/usePodFilters'
@@ -10,30 +9,19 @@ import NodeAllocationBar from '@/components/NodeAllocationBar.vue'
 import PodRow from '@/components/PodRow.vue'
 import PodDetailPanel from '@/components/PodDetailPanel.vue'
 
+const props = defineProps<{ name: string }>()
 const router = useRouter()
-const clusterStore = useClusterStore()
 
-const { status, data: pods } = useEventSource<PodDTO[]>('/api/v1/stream/workloads')
+const { status, data: allPods } = useEventSource<PodDTO[]>('/api/v1/stream/workloads')
 
-const {
-  search,
-  namespaceFilter,
-  activeFilters,
-  includeKubeSystem,
-  namespaceOptions,
-  scopedPods,
-  filteredPods,
-  groups,
-  clearFilters,
-  filtersActive,
-  overCpuRequestCount,
-  overMemRequestCount,
-} = usePodFilters(pods)
+// Scoped to this one namespace before it ever reaches usePodFilters, so
+// every count/group/aggregate downstream is already namespace-local.
+const nsPods = computed(() => (allPods.value ?? []).filter((p) => p.namespace === props.name))
 
-// The cluster-wide summary below is deliberately independent of the
-// kube-system toggle above — that toggle only controls list noise, not
-// what counts as "all workloads" for the aggregate picture.
-const allWorkloads = computed(() => totalAggregate(pods.value ?? []))
+const { search, activeFilters, filteredPods, groups, clearFilters, filtersActive } =
+  usePodFilters(nsPods)
+
+const summary = computed(() => totalAggregate(nsPods.value))
 
 function goToNode(nodeName: string) {
   router.push({ name: 'node-drilldown', params: { name: nodeName } })
@@ -45,13 +33,17 @@ const openPanels = ref<string[]>([])
 </script>
 
 <template>
-  <v-container fluid class="workloads-view">
+  <v-container fluid class="namespace-drilldown">
     <div class="d-flex align-center mb-2 ga-2">
+      <v-btn
+        icon="mdi-arrow-left"
+        variant="text"
+        density="comfortable"
+        @click="router.push({ name: 'namespaces' })"
+      />
       <div>
-        <h1 class="text-h6 mb-0">Workloads</h1>
-        <div class="text-caption text-medium-emphasis">
-          {{ scopedPods.length }} pods across the cluster
-        </div>
+        <h1 class="text-h6 mb-0">{{ name }}</h1>
+        <div class="text-caption text-medium-emphasis">{{ nsPods.length }} pods</div>
       </div>
       <v-spacer />
       <v-chip size="small" :color="status === 'live' ? 'healthy' : 'warning'" variant="outlined">
@@ -59,46 +51,23 @@ const openPanels = ref<string[]>([])
       </v-chip>
     </div>
 
-    <v-card v-if="pods" class="mb-5" variant="flat" border>
+    <v-card v-if="allPods" class="mb-5" variant="flat" border>
       <v-card-text>
-        <div class="text-body-1 font-weight-medium mb-2">
-          All workloads: usage vs requests/limits
-        </div>
+        <div class="text-body-1 font-weight-medium mb-2">Usage vs requests/limits</div>
         <NodeAllocationBar
-          :usage="allWorkloads.usageCpu"
-          :requests="allWorkloads.requestsCpu"
-          :limits="allWorkloads.limitsCpu"
-          :capacity="clusterStore.summary?.totalCapacityCpu"
+          :usage="summary.usageCpu"
+          :requests="summary.requestsCpu"
+          :limits="summary.limitsCpu"
           :format="formatCpu"
         />
         <NodeAllocationBar
-          :usage="allWorkloads.usageMem"
-          :requests="allWorkloads.requestsMem"
-          :limits="allWorkloads.limitsMem"
-          :capacity="clusterStore.summary?.totalCapacityMem"
+          :usage="summary.usageMem"
+          :requests="summary.requestsMem"
+          :limits="summary.limitsMem"
           :format="formatMem"
         />
       </v-card-text>
     </v-card>
-
-    <div class="d-flex flex-wrap ga-3 mb-4">
-      <v-chip
-        :color="overCpuRequestCount > 0 ? 'critical' : 'healthy'"
-        variant="tonal"
-        size="small"
-      >
-        <v-icon v-if="overCpuRequestCount > 0" start icon="mdi-alert" />
-        {{ overCpuRequestCount }} / {{ scopedPods.length }} pods over CPU request
-      </v-chip>
-      <v-chip
-        :color="overMemRequestCount > 0 ? 'critical' : 'healthy'"
-        variant="tonal"
-        size="small"
-      >
-        <v-icon v-if="overMemRequestCount > 0" start icon="mdi-alert" />
-        {{ overMemRequestCount }} / {{ scopedPods.length }} pods over memory request
-      </v-chip>
-    </div>
 
     <v-card class="mb-5" variant="flat" border>
       <v-card-text class="d-flex flex-wrap align-center ga-3">
@@ -110,15 +79,6 @@ const openPanels = ref<string[]>([])
           hide-details
           clearable
           style="max-width: 240px"
-        />
-        <v-select
-          v-model="namespaceFilter"
-          :items="namespaceOptions"
-          label="Namespace"
-          density="compact"
-          hide-details
-          clearable
-          style="max-width: 220px"
         />
         <v-select
           v-model="activeFilters"
@@ -146,17 +106,9 @@ const openPanels = ref<string[]>([])
             </v-list-item>
           </template>
         </v-select>
-        <v-switch
-          v-model="includeKubeSystem"
-          label="kube-system"
-          color="watch"
-          density="compact"
-          hide-details
-          inset
-        />
         <v-spacer />
         <span class="text-caption text-medium-emphasis"
-          >{{ filteredPods.length }} / {{ scopedPods.length }} pods</span
+          >{{ filteredPods.length }} / {{ nsPods.length }} pods</span
         >
         <v-btn v-if="filtersActive" size="small" variant="text" @click="clearFilters"
           >Clear filters</v-btn
@@ -164,16 +116,16 @@ const openPanels = ref<string[]>([])
       </v-card-text>
     </v-card>
 
-    <v-alert v-if="!pods" type="info" variant="tonal" class="mb-4">Waiting for pod data…</v-alert>
+    <v-alert v-if="!allPods" type="info" variant="tonal" class="mb-4"
+      >Waiting for pod data…</v-alert
+    >
     <v-alert v-else-if="filteredPods.length === 0" type="info" variant="tonal" class="mb-4">
       No pods match the current filters.
     </v-alert>
 
     <v-card v-for="group in groups" :key="group.controllerKey" class="mb-4" variant="flat" border>
       <v-card-title class="text-body-1 d-flex align-center ga-2">
-        <v-icon icon="mdi-folder-outline" size="small" />
-        {{ group.namespace }}
-        <v-icon icon="mdi-chevron-right" size="small" class="text-medium-emphasis" />
+        <v-icon icon="mdi-cube-outline" size="small" />
         {{ group.controllerLabel }}
         <v-chip size="x-small" variant="tonal" class="ml-1">{{ group.pods.length }}</v-chip>
       </v-card-title>

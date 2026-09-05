@@ -11,6 +11,17 @@ const router = createRouter({
       component: () => import('@/views/WorkloadsView.vue'),
     },
     {
+      path: '/namespaces',
+      name: 'namespaces',
+      component: () => import('@/views/NamespacesView.vue'),
+    },
+    {
+      path: '/namespaces/:name',
+      name: 'namespace-drilldown',
+      component: () => import('@/views/NamespaceDrilldownView.vue'),
+      props: true,
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),

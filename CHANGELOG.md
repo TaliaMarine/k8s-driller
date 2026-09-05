@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.6.0...v2.7.0) (2026-09-05)
+
+
+### Features
+
+* add kube-system visibility toggle to pod lists ([703020a](https://github.com/TaliaMarine/k8s-driller/commit/703020a8852e9902e63a996b73d48733a6be2229))
+* rework node card resource bars, drop colored border and overcommit alert ([8159c03](https://github.com/TaliaMarine/k8s-driller/commit/8159c031c0b4f0bd34849d46349fceadbf9ab5c1))
+
 ## [2.6.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.5.2...v2.6.0) (2026-09-05)
 
 

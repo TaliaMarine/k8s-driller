@@ -15,6 +15,8 @@ export function nodeHealthColor(health: NodeHealth): string {
       return 'warning'
     case 'Not Ready':
       return 'watch'
+    case 'Unschedulable':
+      return 'warning'
     default:
       return 'critical'
   }

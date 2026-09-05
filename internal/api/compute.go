@@ -109,10 +109,11 @@ func (s *Server) buildNodeDTO(n k8swatch.NodeInfo) NodeDTO {
 	return NodeDTO{
 		Name:             n.Name,
 		Ready:            n.Ready,
+		Unschedulable:    n.Unschedulable,
 		CapacityCPU:      n.Capacity.CPU,
 		CapacityMemory:   n.Capacity.Memory,
 		Pressure:         p,
-		Health:           nodeHealth(n.Ready, p),
+		Health:           nodeHealth(n.Ready, n.Unschedulable, p),
 		PodCount:         len(pods),
 		PodsOverRequests: overRequests,
 	}

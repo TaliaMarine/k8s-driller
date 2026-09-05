@@ -12,11 +12,12 @@ import (
 const nodeLivePressureThresholdPct = 90
 
 const (
-	NodeHealthy     = "Healthy"
-	NodeCPUPressure = "CPU Pressure"
-	NodeMemPressure = "Mem Pressure"
-	NodeOvercommit  = "Overcommit"
-	NodeNotReady    = "Not Ready"
+	NodeHealthy       = "Healthy"
+	NodeCPUPressure   = "CPU Pressure"
+	NodeMemPressure   = "Mem Pressure"
+	NodeOvercommit    = "Overcommit"
+	NodeNotReady      = "Not Ready"
+	NodeUnschedulable = "Unschedulable"
 )
 
 // ContainerDTO is one container's configured resources, live usage share,
@@ -58,6 +59,7 @@ type PodDTO struct {
 type NodeDTO struct {
 	Name             string                `json:"name"`
 	Ready            bool                  `json:"ready"`
+	Unschedulable    bool                  `json:"unschedulable"`
 	CapacityCPU      int64                 `json:"capacityCpu"`
 	CapacityMemory   int64                 `json:"capacityMemory"`
 	Pressure         pressure.NodePressure `json:"pressure"`
@@ -88,11 +90,16 @@ type ClusterSummaryDTO struct {
 // A node that isn't Ready reports stale/absent metrics rather than an
 // actual pressure state, so Not Ready is checked first and short-circuits
 // the rest — a NotReady node should never be labeled Healthy just because
-// its last-known pressure numbers looked fine.
-func nodeHealth(ready bool, p pressure.NodePressure) string {
+// its last-known pressure numbers looked fine. Unschedulable (cordoned, or
+// draining) is checked next for the same reason: it's an administrative
+// lifecycle state, not a pressure reading, and a cordoned node shouldn't
+// read as Healthy just because it isn't (yet) under pressure.
+func nodeHealth(ready, unschedulable bool, p pressure.NodePressure) string {
 	switch {
 	case !ready:
 		return NodeNotReady
+	case unschedulable:
+		return NodeUnschedulable
 	case p.LiveMemPct > nodeLivePressureThresholdPct:
 		return NodeMemPressure
 	case p.LiveCPUPct > nodeLivePressureThresholdPct:

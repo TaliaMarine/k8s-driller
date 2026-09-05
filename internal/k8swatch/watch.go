@@ -43,9 +43,10 @@ type PodInfo struct {
 
 // NodeInfo is a node's identity and allocatable capacity.
 type NodeInfo struct {
-	Name     string
-	Capacity pressure.NodeCapacity
-	Ready    bool
+	Name          string
+	Capacity      pressure.NodeCapacity
+	Ready         bool
+	Unschedulable bool // node.Spec.Unschedulable — set by `kubectl cordon` or during drain
 }
 
 // OnChangeFunc is invoked after any add/update/delete that could affect
@@ -162,7 +163,8 @@ func (s *Store) upsertNode(obj interface{}) {
 			CPU:    node.Status.Allocatable.Cpu().MilliValue(),
 			Memory: node.Status.Allocatable.Memory().Value(),
 		},
-		Ready: ready,
+		Ready:         ready,
+		Unschedulable: node.Spec.Unschedulable,
 	}
 	s.mu.Lock()
 	s.nodes[node.Name] = info

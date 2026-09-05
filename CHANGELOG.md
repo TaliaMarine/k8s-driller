@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.5.0...v2.5.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* NotReady node health, plateau-aware recommendations, reworked pod usage bars ([6846f4b](https://github.com/TaliaMarine/k8s-driller/commit/6846f4b3c8a253a65b560dc652a20861dbd51299))
+
 ## [2.5.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.4.1...v2.5.0) (2026-09-04)
 
 

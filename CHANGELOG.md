@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.5.1...v2.5.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* usage bar coloring/icons, node-link grouping, merged missing chips ([9abeccb](https://github.com/TaliaMarine/k8s-driller/commit/9abeccb49a6bc0ac5094aeb93a19ca56de1d417e))
+
 ## [2.5.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.5.0...v2.5.1) (2026-09-05)
 
 

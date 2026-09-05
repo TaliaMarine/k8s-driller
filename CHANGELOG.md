@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.7.0...v2.8.0) (2026-09-05)
+
+
+### Features
+
+* add Namespaces page and cluster/namespace-wide usage visualizations ([504b503](https://github.com/TaliaMarine/k8s-driller/commit/504b503467a0c38c51415dcd03e44e39844e2096))
+
 ## [2.7.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.6.0...v2.7.0) (2026-09-05)
 
 

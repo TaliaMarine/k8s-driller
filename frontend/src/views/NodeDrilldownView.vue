@@ -197,6 +197,8 @@ function clearAllFilters() {
                 :limit-segments="cpuLimitSegments"
                 :usage="cpuUsageTotal"
                 :format="formatCpu"
+                :selected-key="selectedWorkloadKey"
+                @select="selectWorkload"
               />
               <NodeDistributionChart
                 label="Memory"
@@ -206,6 +208,8 @@ function clearAllFilters() {
                 :limit-segments="memLimitSegments"
                 :usage="memUsageTotal"
                 :format="formatMem"
+                :selected-key="selectedWorkloadKey"
+                @select="selectWorkload"
               />
             </v-card-text>
           </v-window-item>

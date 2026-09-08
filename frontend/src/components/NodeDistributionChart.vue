@@ -9,13 +9,19 @@ export interface DistSegment {
 
 const props = defineProps<{
   label: string
+  // 0 (or omitted) when there's no natural ceiling to mark — e.g. a
+  // namespace, which has no capacity of its own — in which case no capacity
+  // line/track renders at all rather than a misleading one sitting at 0%.
   capacity: number
   usageSegments: DistSegment[]
   requestSegments: DistSegment[]
   limitSegments: DistSegment[]
   usage: number // authoritative node-level live usage (metrics-server) — may exceed sum(usageSegments) by unattributed overhead, so it drives the marker line, not the usage row's own length
   format: (v: number) => string
+  selectedKey?: string | null
 }>()
+
+const emit = defineEmits<{ select: [item: DistSegment] }>()
 
 /**
  * A three-row meter — usage, requests, limits — each showing its own
@@ -44,6 +50,7 @@ const limitY = ROW_STRIDE * 2
 
 const requestsTotal = computed(() => props.requestSegments.reduce((sum, s) => sum + s.value, 0))
 const limitsTotal = computed(() => props.limitSegments.reduce((sum, s) => sum + s.value, 0))
+const hasCapacity = computed(() => props.capacity > 0)
 const scaleMax = computed(() =>
   Math.max(props.capacity, limitsTotal.value, requestsTotal.value, props.usage, 1),
 )
@@ -63,9 +70,16 @@ function layout(segments: DistSegment[]) {
 const usageLayout = computed(() => layout(props.usageSegments))
 const requestLayout = computed(() => layout(props.requestSegments))
 const limitLayout = computed(() => layout(props.limitSegments))
-const overflowWidth = computed(() => Math.max(limitLayout.value.end - capacityX.value, 0))
+// Tints the portion of the limit row past the capacity line rather than
+// replacing it — the individual per-workload boxes stay visible (and
+// clickable) all the way to their natural width, even when that runs well
+// past capacity, instead of collapsing into one opaque "overflow" block
+// that hides which workloads are actually driving the overcommit.
+const overflowWidth = computed(() =>
+  hasCapacity.value ? Math.max(limitLayout.value.end - capacityX.value, 0) : 0,
+)
 const usageMarkerX = computed(() => (props.usage / scaleMax.value) * VIEW_W)
-const overcommit = computed(() => limitsTotal.value > props.capacity)
+const overcommit = computed(() => hasCapacity.value && limitsTotal.value > props.capacity)
 
 const hover = reactive<{ visible: boolean; name: string; value: number; x: number }>({
   visible: false,
@@ -91,7 +105,8 @@ function hideHover() {
       <span class="text-body-2 font-weight-medium">{{ label }}</span>
       <span class="text-caption text-medium-emphasis dist-summary">
         {{ format(usage) }} live · {{ format(requestsTotal) }} requested ·
-        {{ format(limitsTotal) }} limit · {{ format(capacity) }} capacity
+        {{ format(limitsTotal) }} limit
+        <template v-if="hasCapacity">· {{ format(capacity) }} capacity</template>
       </span>
     </div>
 
@@ -103,12 +118,14 @@ function hideHover() {
           v-for="box in usageLayout.boxes"
           :key="`usage-${box.seg.key}`"
           class="seg seg-usage"
+          :class="{ 'seg--selected': box.seg.key === selectedKey }"
           :x="box.x"
           :y="usageY"
           :width="box.width"
           :height="ROW_H"
           @mouseenter="showHover(box.seg, box.x)"
           @mouseleave="hideHover"
+          @click="emit('select', box.seg)"
         >
           <title>{{ box.seg.name }}: {{ format(box.seg.value) }}</title>
         </rect>
@@ -119,45 +136,60 @@ function hideHover() {
           v-for="box in requestLayout.boxes"
           :key="`req-${box.seg.key}`"
           class="seg seg-request"
+          :class="{ 'seg--selected': box.seg.key === selectedKey }"
           :x="box.x"
           :y="requestY"
           :width="box.width"
           :height="ROW_H"
           @mouseenter="showHover(box.seg, box.x)"
           @mouseleave="hideHover"
+          @click="emit('select', box.seg)"
         >
           <title>{{ box.seg.name }}: {{ format(box.seg.value) }}</title>
         </rect>
 
-        <!-- Row 3: limits (may overflow past capacity -> overcommit) -->
-        <rect class="track" x="0" :y="limitY" :width="capacityX" :height="ROW_H" rx="4" />
+        <!-- Row 3: limits, drawn at full natural width like the rows above —
+             a workload's box never gets clipped or swallowed by a generic
+             "overflow" block just because the row as a whole runs past
+             capacity. -->
+        <rect class="track" x="0" :y="limitY" :width="VIEW_W" :height="ROW_H" rx="4" />
         <rect
           v-for="box in limitLayout.boxes"
           :key="`lim-${box.seg.key}`"
           class="seg seg-limit"
+          :class="{ 'seg--selected': box.seg.key === selectedKey }"
           :x="box.x"
           :y="limitY"
-          :width="Math.min(box.width, Math.max(capacityX - box.x - SEG_GAP, 0))"
+          :width="box.width"
           :height="ROW_H"
           @mouseenter="showHover(box.seg, box.x)"
           @mouseleave="hideHover"
+          @click="emit('select', box.seg)"
         >
           <title>{{ box.seg.name }}: {{ format(box.seg.value) }}</title>
         </rect>
+        <!-- Overcommit reads as a tint over the boxes past the capacity
+             line, not a replacement for them — pointer-events: none so
+             clicks reach the box underneath. -->
         <rect
           v-if="overcommit"
-          class="seg seg-overflow"
+          class="seg-overflow-tint"
           :x="capacityX"
           :y="limitY"
           :width="overflowWidth"
           :height="ROW_H"
           rx="4"
-        >
-          <title>Over capacity by {{ format(limitsTotal - capacity) }}</title>
-        </rect>
+        />
 
         <!-- Capacity boundary, spanning all three rows -->
-        <line class="capacity-line" :x1="capacityX" y1="-3" :x2="capacityX" :y2="VIEW_H + 3" />
+        <line
+          v-if="hasCapacity"
+          class="capacity-line"
+          :x1="capacityX"
+          y1="-3"
+          :x2="capacityX"
+          :y2="VIEW_H + 3"
+        />
 
         <!-- Live usage marker, spanning all three rows -->
         <line class="usage-line" :x1="usageMarkerX" y1="-2" :x2="usageMarkerX" :y2="VIEW_H + 2" />
@@ -210,6 +242,13 @@ function hideHover() {
   fill: rgb(var(--v-theme-surface-variant));
   opacity: 0.5;
 }
+.seg {
+  cursor: pointer;
+}
+.seg--selected {
+  stroke: rgb(var(--v-theme-on-surface));
+  stroke-width: 2;
+}
 /* Usage / requests / limits form one ordinal progression (actual -> reserved
    -> ceiling) on a single hue, three clearly distinct lightness steps —
    mixed toward the theme's own surface color so each step stays correct in
@@ -227,8 +266,10 @@ function hideHover() {
   stroke-width: 1;
   stroke-opacity: 0.6;
 }
-.seg-overflow {
+.seg-overflow-tint {
   fill: rgb(var(--v-theme-critical));
+  opacity: 0.3;
+  pointer-events: none;
 }
 .capacity-line {
   stroke: rgb(var(--v-theme-on-surface));
@@ -284,7 +325,7 @@ function hideHover() {
   border: 1px solid rgba(var(--v-theme-watch), 0.6);
 }
 .swatch-overflow {
-  background: rgb(var(--v-theme-critical));
+  background: color-mix(in srgb, rgb(var(--v-theme-critical)) 30%, rgb(var(--v-theme-surface)));
 }
 .marker-swatch {
   display: inline-block;

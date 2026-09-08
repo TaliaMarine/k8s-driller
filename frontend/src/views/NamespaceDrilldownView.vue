@@ -11,7 +11,7 @@ import {
   totalAggregate,
   usePodFilters,
 } from '@/composables/usePodFilters'
-import NodeAllocationBar from '@/components/NodeAllocationBar.vue'
+import NodeDistributionChart from '@/components/NodeDistributionChart.vue'
 import PodRow from '@/components/PodRow.vue'
 import PodDetailPanel from '@/components/PodDetailPanel.vue'
 import TreemapPanel from '@/components/TreemapPanel.vue'
@@ -140,18 +140,27 @@ function clearAllFilters() {
           </v-window-item>
           <v-window-item value="bars">
             <v-card-text>
-              <div class="text-body-1 font-weight-medium mb-2">Usage vs requests/limits</div>
-              <NodeAllocationBar
+              <NodeDistributionChart
+                label="CPU"
+                :capacity="0"
+                :usage-segments="cpuUsageSegments"
+                :request-segments="cpuRequestSegments"
+                :limit-segments="cpuLimitSegments"
                 :usage="summary.usageCpu"
-                :requests="summary.requestsCpu"
-                :limits="summary.limitsCpu"
                 :format="formatCpu"
+                :selected-key="selectedWorkloadKey"
+                @select="selectWorkload"
               />
-              <NodeAllocationBar
+              <NodeDistributionChart
+                label="Memory"
+                :capacity="0"
+                :usage-segments="memUsageSegments"
+                :request-segments="memRequestSegments"
+                :limit-segments="memLimitSegments"
                 :usage="summary.usageMem"
-                :requests="summary.requestsMem"
-                :limits="summary.limitsMem"
                 :format="formatMem"
+                :selected-key="selectedWorkloadKey"
+                @select="selectWorkload"
               />
             </v-card-text>
           </v-window-item>

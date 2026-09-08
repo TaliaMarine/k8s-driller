@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.10.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.9.0...v2.10.0) (2026-09-08)
+
+
+### Features
+
+* keep per-workload boxes visible past capacity and make bars clickable ([2966b3b](https://github.com/TaliaMarine/k8s-driller/commit/2966b3b9d0cdb55de6b597e952721fd6ba0e54a5))
+
 ## [2.9.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.8.0...v2.9.0) (2026-09-08)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.8.0...v2.9.0) (2026-09-08)
+
+
+### Features
+
+* add treemap views for resource usage by workload/namespace ([a8b02a7](https://github.com/TaliaMarine/k8s-driller/commit/a8b02a71f8c738f032249d549899275f1c761a55))
+
 ## [2.8.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.7.0...v2.8.0) (2026-09-05)
 
 

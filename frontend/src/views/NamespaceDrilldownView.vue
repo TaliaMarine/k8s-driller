@@ -4,10 +4,18 @@ import { useRouter } from 'vue-router'
 import { useEventSource } from '@/composables/useEventSource'
 import type { PodDTO } from '@/types/api'
 import { formatCpu, formatMem } from '@/utils/format'
-import { FILTER_OPTIONS, podKey, totalAggregate, usePodFilters } from '@/composables/usePodFilters'
+import {
+  containerAllocation,
+  FILTER_OPTIONS,
+  podKey,
+  totalAggregate,
+  usePodFilters,
+} from '@/composables/usePodFilters'
 import NodeAllocationBar from '@/components/NodeAllocationBar.vue'
 import PodRow from '@/components/PodRow.vue'
 import PodDetailPanel from '@/components/PodDetailPanel.vue'
+import TreemapPanel from '@/components/TreemapPanel.vue'
+import type { TreemapItem } from '@/utils/treemap'
 
 const props = defineProps<{ name: string }>()
 const router = useRouter()
@@ -23,6 +31,40 @@ const { search, activeFilters, filteredPods, groups, clearFilters, filtersActive
 
 const summary = computed(() => totalAggregate(nsPods.value))
 
+// Per-pod breakdown for the treemap tab — sourced from every pod in the
+// namespace, not filteredPods, so it always reflects the whole namespace
+// regardless of the list filters below.
+const cpuUsageSegments = computed<TreemapItem[]>(() =>
+  nsPods.value
+    .map((p) => ({ key: podKey(p), name: p.name, value: p.usageCpu }))
+    .filter((s) => s.value > 0),
+)
+const memUsageSegments = computed<TreemapItem[]>(() =>
+  nsPods.value
+    .map((p) => ({ key: podKey(p), name: p.name, value: p.usageMem }))
+    .filter((s) => s.value > 0),
+)
+const cpuRequestSegments = computed<TreemapItem[]>(() =>
+  nsPods.value
+    .map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'requestsCpu') }))
+    .filter((s) => s.value > 0),
+)
+const cpuLimitSegments = computed<TreemapItem[]>(() =>
+  nsPods.value
+    .map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'limitsCpu') }))
+    .filter((s) => s.value > 0),
+)
+const memRequestSegments = computed<TreemapItem[]>(() =>
+  nsPods.value
+    .map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'requestsMem') }))
+    .filter((s) => s.value > 0),
+)
+const memLimitSegments = computed<TreemapItem[]>(() =>
+  nsPods.value
+    .map((p) => ({ key: podKey(p), name: p.name, value: containerAllocation(p, 'limitsMem') }))
+    .filter((s) => s.value > 0),
+)
+
 function goToNode(nodeName: string) {
   router.push({ name: 'node-drilldown', params: { name: nodeName } })
 }
@@ -30,6 +72,20 @@ function goToNode(nodeName: string) {
 // Keyed by "namespace/name", not array index, so refreshed SSE pushes (new
 // array identity every time) never collapse a panel the user had open.
 const openPanels = ref<string[]>([])
+
+const resourceTab = ref('treemap')
+const selectedWorkloadKey = ref<string | null>(null)
+
+function selectWorkload(item: TreemapItem) {
+  clearFilters()
+  search.value = item.name
+  selectedWorkloadKey.value = item.key
+}
+
+function clearAllFilters() {
+  clearFilters()
+  selectedWorkloadKey.value = null
+}
 </script>
 
 <template>
@@ -52,21 +108,55 @@ const openPanels = ref<string[]>([])
     </div>
 
     <v-card v-if="allPods" class="mb-5" variant="flat" border>
-      <v-card-text>
-        <div class="text-body-1 font-weight-medium mb-2">Usage vs requests/limits</div>
-        <NodeAllocationBar
-          :usage="summary.usageCpu"
-          :requests="summary.requestsCpu"
-          :limits="summary.limitsCpu"
-          :format="formatCpu"
-        />
-        <NodeAllocationBar
-          :usage="summary.usageMem"
-          :requests="summary.requestsMem"
-          :limits="summary.limitsMem"
-          :format="formatMem"
-        />
-      </v-card-text>
+      <div class="d-flex">
+        <v-tabs v-model="resourceTab" direction="vertical" color="watch" class="resource-tabs">
+          <v-tab value="treemap" prepend-icon="mdi-chart-tree">By workload</v-tab>
+          <v-tab value="bars" prepend-icon="mdi-chart-bar">Bars</v-tab>
+        </v-tabs>
+        <v-window v-model="resourceTab" class="flex-grow-1">
+          <v-window-item value="treemap">
+            <v-card-text>
+              <TreemapPanel
+                label="CPU"
+                unit-label="workload"
+                :usage-items="cpuUsageSegments"
+                :request-items="cpuRequestSegments"
+                :limit-items="cpuLimitSegments"
+                :format="formatCpu"
+                :selected-key="selectedWorkloadKey"
+                @select="selectWorkload"
+              />
+              <TreemapPanel
+                label="Memory"
+                unit-label="workload"
+                :usage-items="memUsageSegments"
+                :request-items="memRequestSegments"
+                :limit-items="memLimitSegments"
+                :format="formatMem"
+                :selected-key="selectedWorkloadKey"
+                @select="selectWorkload"
+              />
+            </v-card-text>
+          </v-window-item>
+          <v-window-item value="bars">
+            <v-card-text>
+              <div class="text-body-1 font-weight-medium mb-2">Usage vs requests/limits</div>
+              <NodeAllocationBar
+                :usage="summary.usageCpu"
+                :requests="summary.requestsCpu"
+                :limits="summary.limitsCpu"
+                :format="formatCpu"
+              />
+              <NodeAllocationBar
+                :usage="summary.usageMem"
+                :requests="summary.requestsMem"
+                :limits="summary.limitsMem"
+                :format="formatMem"
+              />
+            </v-card-text>
+          </v-window-item>
+        </v-window>
+      </div>
     </v-card>
 
     <v-card class="mb-5" variant="flat" border>
@@ -110,7 +200,7 @@ const openPanels = ref<string[]>([])
         <span class="text-caption text-medium-emphasis"
           >{{ filteredPods.length }} / {{ nsPods.length }} pods</span
         >
-        <v-btn v-if="filtersActive" size="small" variant="text" @click="clearFilters"
+        <v-btn v-if="filtersActive" size="small" variant="text" @click="clearAllFilters"
           >Clear filters</v-btn
         >
       </v-card-text>
@@ -143,3 +233,10 @@ const openPanels = ref<string[]>([])
     </v-card>
   </v-container>
 </template>
+
+<style scoped>
+.resource-tabs {
+  flex: 0 0 160px;
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+</style>

@@ -44,8 +44,8 @@ const tooltip = computed(() => {
 <style scoped>
 .pie-ratio {
   flex-shrink: 0;
-  width: 12px;
-  height: 12px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
 }
 .pie-ratio-empty {

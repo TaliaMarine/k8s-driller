@@ -261,8 +261,8 @@ function selectPod(name: string) {
             <PodRow
               :pod="pod"
               show-node-link
-              :cpu-total="summary.usageCpu"
-              :mem-total="summary.usageMem"
+              :cpu-requests-total="summary.requestsCpu"
+              :mem-requests-total="summary.requestsMem"
               @go-to-node="goToNode"
             />
           </v-expansion-panel-title>

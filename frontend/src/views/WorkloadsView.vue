@@ -44,23 +44,6 @@ const {
 // what counts as "all workloads" for the aggregate picture.
 const allWorkloads = computed(() => totalAggregate(pods.value ?? []))
 
-// Denominator for each pod row's share-of-cluster pie: capacity of Ready
-// nodes only, since a Not Ready node's allocatable capacity isn't actually
-// schedulable/usable right now — totalCapacityCpu/Mem on the cluster
-// summary sums every node regardless of readiness, which would understate
-// each pod's real share whenever a node is down.
-const readyCapacityCpu = computed(
-  () =>
-    clusterStore.summary?.nodes.filter((n) => n.ready).reduce((sum, n) => sum + n.capacityCpu, 0) ??
-    0,
-)
-const readyCapacityMem = computed(
-  () =>
-    clusterStore.summary?.nodes
-      .filter((n) => n.ready)
-      .reduce((sum, n) => sum + n.capacityMemory, 0) ?? 0,
-)
-
 // Per-pod breakdown for the treemap tab — deliberately sourced from the raw
 // pod list, not scopedPods/filteredPods, so it always reflects every
 // workload in the cluster regardless of the list filters below (same
@@ -331,8 +314,8 @@ function selectPod(name: string) {
             <PodRow
               :pod="pod"
               show-node-link
-              :cpu-total="readyCapacityCpu"
-              :mem-total="readyCapacityMem"
+              :cpu-requests-total="allWorkloads.requestsCpu"
+              :mem-requests-total="allWorkloads.requestsMem"
               @go-to-node="goToNode"
             />
           </v-expansion-panel-title>

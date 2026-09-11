@@ -14,11 +14,12 @@ import PieRatio from './PieRatio.vue'
 defineProps<{
   pod: PodDTO
   showNodeLink?: boolean
-  // Denominators for the CPU/Memory share-of-whole pies: node capacity on
-  // the node drilldown, ready-node cluster capacity on Workloads, or
-  // namespace-wide usage on the namespace drilldown — see each view.
-  cpuTotal?: number
-  memTotal?: number
+  // Denominators for the CPU/Memory share-of-whole pies: total requested
+  // CPU/memory across the same scope (node, cluster, or namespace — see
+  // each view) that this pod's own requested CPU/memory is measured
+  // against, not usage-vs-capacity.
+  cpuRequestsTotal?: number
+  memRequestsTotal?: number
 }>()
 defineEmits<{ goToNode: [nodeName: string] }>()
 </script>
@@ -26,8 +27,18 @@ defineEmits<{ goToNode: [nodeName: string] }>()
 <template>
   <div class="d-flex align-center ga-2 flex-wrap pod-row">
     <div class="d-flex align-center ga-2 pod-pie-pair">
-      <PieRatio label="CPU share" :value="pod.usageCpu" :total="cpuTotal" :format="formatCpu" />
-      <PieRatio label="Memory share" :value="pod.usageMem" :total="memTotal" :format="formatMem" />
+      <PieRatio
+        label="CPU requests"
+        :value="containerAllocation(pod, 'requestsCpu')"
+        :total="cpuRequestsTotal"
+        :format="formatCpu"
+      />
+      <PieRatio
+        label="Memory requests"
+        :value="containerAllocation(pod, 'requestsMem')"
+        :total="memRequestsTotal"
+        :format="formatMem"
+      />
     </div>
     <div class="d-flex flex-column ga-1 pod-usage-stack">
       <MiniRatioBar

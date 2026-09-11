@@ -9,6 +9,7 @@ import {
   containerAllocation,
   FILTER_OPTIONS,
   podKey,
+  totalAggregate,
   usePodFilters,
 } from '@/composables/usePodFilters'
 import PodRow from '@/components/PodRow.vue'
@@ -86,6 +87,12 @@ const cpuUsageTotal = computed(
 const memUsageTotal = computed(
   () => ((node.value?.pressure.liveMemPct ?? 0) / 100) * (node.value?.capacityMemory ?? 0),
 )
+
+// Denominator for each pod row's share-of-node pie: total requested
+// CPU/memory across every pod on this node (always the whole node,
+// independent of the list filters below — same principle as the
+// distribution/treemap segments above).
+const nodeTotals = computed(() => totalAggregate(pods.value ?? []))
 
 // Keyed by "namespace/name", not array index, so refreshed SSE pushes (new
 // array identity every time, SPECS.md §2 data flow) never collapse a panel
@@ -324,7 +331,11 @@ function selectPod(name: string) {
       <v-expansion-panels v-model="openPanels" multiple variant="accordion">
         <v-expansion-panel v-for="pod in group.pods" :key="podKey(pod)" :value="podKey(pod)">
           <v-expansion-panel-title>
-            <PodRow :pod="pod" :cpu-total="node?.capacityCpu" :mem-total="node?.capacityMemory" />
+            <PodRow
+              :pod="pod"
+              :cpu-requests-total="nodeTotals.requestsCpu"
+              :mem-requests-total="nodeTotals.requestsMem"
+            />
           </v-expansion-panel-title>
           <v-expansion-panel-text>
             <PodDetailPanel :pod="pod" />

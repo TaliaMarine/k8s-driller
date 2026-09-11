@@ -2,11 +2,12 @@
 import { computed } from 'vue'
 
 // A tiny share-of-whole indicator that sits before a pod's CPU/Memory bar:
-// how much of the surrounding scope (node capacity, cluster capacity, or
-// namespace-wide usage — the caller decides via `total`) this one pod
-// accounts for. Deliberately not scaled against the same request/limit
-// denominator as MiniRatioBar next to it — that bar is about the pod's own
-// ceiling, this pie is about the pod's weight in a larger group.
+// how much of the surrounding scope's total requested CPU/memory (the
+// caller decides the scope via `total` — a node, the cluster, or one
+// namespace) this one pod's own request accounts for. Deliberately not
+// scaled against the same request/limit denominator as MiniRatioBar next
+// to it — that bar is about the pod's own usage vs. its own ceiling, this
+// pie is about the pod's weight in a larger group's requests.
 const props = defineProps<{
   label: string
   value: number

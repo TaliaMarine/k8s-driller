@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import type { PodAnalysisDTO, PodDTO } from '@/types/api'
 import { formatCpu, formatMem } from '@/utils/format'
-import DeltaBars from './DeltaBars.vue'
+import RingGauge from './RingGauge.vue'
 import UsageHistoryChart from './UsageHistoryChart.vue'
 import PodManifestView from './PodManifestView.vue'
 
@@ -90,7 +90,7 @@ function exportForAI() {
     <v-col class="pod-detail-content">
       <v-window v-model="tab">
         <v-window-item value="charts">
-          <DeltaBars
+          <RingGauge
             label="CPU"
             :usage="pod.usageCpu"
             :request="containerAllocation(pod, 'requestsCpu') || undefined"
@@ -99,7 +99,7 @@ function exportForAI() {
             :format="formatCpu"
             :danger="pod.throttlingRisk"
           />
-          <DeltaBars
+          <RingGauge
             label="Memory"
             :usage="pod.usageMem"
             :request="containerAllocation(pod, 'requestsMem') || undefined"

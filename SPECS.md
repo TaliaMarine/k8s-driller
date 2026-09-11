@@ -270,18 +270,16 @@ menu items appear on the right, so it doesn't visually drift depending on role.
    - Workload list grouped by namespace → controller (Deployment/StatefulSet/DaemonSet/bare Pod), filterable
      by name, namespace, and misconfiguration/pressure state via a dropdown multi-select (kept out of the
      main row once the filter set grew past what fits on one line). Each row shows, per resource, a tiny
-     "share of node" pie (this pod's usage as a percentage of the node's capacity) followed by the
-     usage/request ratio bar; the bar's track is split at the request/effective-ceiling marker, gray to its
-     left and a faint red "danger zone" tint from the marker to 100%. Rows expand into the Pod Detail Panel
-     (§7.1.1).
+     "share of node" pie (this pod's own requested CPU/memory as a percentage of every pod's requests summed
+     across the node) followed by the usage/request ratio bar; the bar's track is split at the
+     request/effective-ceiling marker, gray to its left and a faint red "danger zone" tint from the marker to
+     100%. Rows expand into the Pod Detail Panel (§7.1.1).
 3. **Workloads** (`/workloads`, "Workloads" tab) — the same namespace → controller grouped, filterable pod
    list as the Node Drilldown, but cluster-wide across every node at once instead of scoped to one. Each
-   row's pie is scoped to the whole cluster instead of one node — usage as a percentage of total capacity
-   across Ready nodes only (a Not Ready node's capacity isn't actually usable right now). Each row
-   additionally has a right-aligned button to jump to the node it's scheduled on. The Namespace Drilldown
-   (linked from a Namespaces list, not detailed separately here) reuses the same row, but scopes its pie to
-   that namespace's own total usage rather than any capacity figure, since a namespace has no capacity of
-   its own.
+   row's pie is scoped to the whole cluster instead of one node — this pod's requests as a percentage of
+   every pod's requests summed cluster-wide. Each row additionally has a right-aligned button to jump to the
+   node it's scheduled on. The Namespace Drilldown (linked from a Namespaces list, not detailed separately
+   here) reuses the same row, scoping its pie to that namespace's own total requests instead.
 4. **Role Management** (`/admin/users`, admin-only) — table of OIDC users with role dropdown; the
    first-ever admin promotion flow (using the bootstrap token) is a distinct, clearly-labeled one-time
    screen, not mixed into routine role editing.
@@ -294,9 +292,12 @@ menu items appear on the right, so it doesn't visually drift depending on role.
 Shown inside an expanded pod row on both the Node Drilldown and Workloads views (one shared component, so
 the two never drift apart). Left-side vertical tabs:
 
-- **Charts** — the Delta Visualizer, now a four-way usage/request/limit/max bars and pressure-state chips
-  (OOM-Risk / Throttling-Risk). The Max bar is the pod's historical peak usage (see below), rendered in a
-  toned-down red so it reads as a reference line rather than a live status.
+- **Charts** — a concentric ring gauge per resource (Grafana's "Kubernetes Compute Resources" panel style):
+  one full-circle ring each for Usage, Requests, Limits, and historical Max (see below), all scaled to the
+  same maximum so relative size is comparable, with a legend beside the rings on wide viewports and below
+  them on narrow ones. Rings for a value that isn't configured (e.g. no limit set) are simply omitted. Usage
+  reads critical-red instead of its usual color when OOM-Risk/Throttling-Risk is set; Max always renders in
+  a toned-down red so it reads as a reference, not a live status.
 - **Analysis** — not fetched until an explicit "Analyse" button is clicked, since it drives a Prometheus
   range query over up to 30 days per pod rather than the always-on live path. Once run, shows: a usage
   history chart per resource (with dashed request/limit reference lines, plus a dashed red-ish reference

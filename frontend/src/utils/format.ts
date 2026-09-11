@@ -22,10 +22,17 @@ export function nodeHealthColor(health: NodeHealth): string {
   }
 }
 
-/** Formats millicores the way Kubernetes resource specs are usually read. */
+/**
+ * Formats millicores the way Kubernetes resource specs are usually read.
+ * Rounds to at most one decimal place — values here are often derived from
+ * percentage math (e.g. pct/100 * capacity), which can leave a float
+ * artifact like 229.999999999997 that must never reach the screen as-is.
+ * Math.round (rather than toFixed's string rounding) also naturally drops
+ * a trailing ".0" for whole numbers.
+ */
 export function formatCpu(millicores: number): string {
-  if (millicores >= 1000) return `${(millicores / 1000).toFixed(millicores % 1000 === 0 ? 0 : 1)}`
-  return `${millicores}m`
+  if (millicores >= 1000) return `${Math.round(millicores / 100) / 10}`
+  return `${Math.round(millicores * 10) / 10}m`
 }
 
 /** Formats bytes as binary Ki/Mi/Gi, matching Kubernetes resource units. */

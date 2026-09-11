@@ -1,6 +1,9 @@
 package api
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/TaliaMarine/k8s-driller/internal/k8swatch"
 	"github.com/TaliaMarine/k8s-driller/internal/pressure"
 )
@@ -52,6 +55,7 @@ type PodDTO struct {
 	UsageMem       int64             `json:"usageMem"`
 	MaxUsageCPU    *int64            `json:"maxUsageCpu,omitempty"`
 	MaxUsageMem    *int64            `json:"maxUsageMem,omitempty"`
+	Teams          []string          `json:"teams,omitempty"`
 	WildWest       bool              `json:"wildWest"`
 	OOMRisk        bool              `json:"oomRisk"`
 	ThrottlingRisk bool              `json:"throttlingRisk"`
@@ -125,6 +129,30 @@ func toContainerDTOs(names []string, resources []pressure.ContainerResources) []
 			WildWest:    pressure.DetectWildWest(r),
 		}
 	}
+	return out
+}
+
+// extractTeams collects the distinct values of every label whose key
+// contains "team" (case-insensitive) — covering plain "team" as well as
+// prefixed conventions like "app.kubernetes.io/team" or "owning-team" — so
+// the pod row and Details tab can both show which team(s) a pod belongs to
+// without either duplicating this logic or re-fetching the full manifest
+// just to read labels already available from the pod watch.
+func extractTeams(labels map[string]string) []string {
+	teams := make(map[string]struct{})
+	for k, v := range labels {
+		if v != "" && strings.Contains(strings.ToLower(k), "team") {
+			teams[v] = struct{}{}
+		}
+	}
+	if len(teams) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(teams))
+	for t := range teams {
+		out = append(out, t)
+	}
+	sort.Strings(out)
 	return out
 }
 

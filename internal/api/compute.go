@@ -71,6 +71,7 @@ func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
 		UsageMem:       usageMem,
 		MaxUsageCPU:    maxUsageCPU,
 		MaxUsageMem:    maxUsageMem,
+		Teams:          extractTeams(p.Labels),
 		WildWest:       wildWest,
 		OOMRisk:        s.pressure.OOMRisk(usageMem, limitMem),
 		ThrottlingRisk: s.pressure.ThrottlingRisk(cpuHistory, limitCPU),

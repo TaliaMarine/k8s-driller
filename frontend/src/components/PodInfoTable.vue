@@ -6,7 +6,7 @@ import { computed } from 'vue'
 // currently selected in the YAML tree next to this table (see
 // PodManifestView.vue). Every section is skipped entirely when the source
 // data doesn't have it, rather than showing an empty table.
-const props = defineProps<{ podData: Record<string, unknown> | null }>()
+const props = defineProps<{ podData: Record<string, unknown> | null; teams?: string[] }>()
 
 type YamlObj = Record<string, unknown>
 
@@ -50,6 +50,31 @@ const status = computed(() => obj(props.podData?.status))
 const creationDate = computed(() => date(metadata.value.creationTimestamp))
 const age = computed(() => (creationDate.value ? formatAge(creationDate.value) : undefined))
 const startDate = computed(() => date(status.value.startTime))
+
+interface ContainerSpec {
+  name: string
+  requestsCpu?: string
+  requestsMem?: string
+  limitsCpu?: string
+  limitsMem?: string
+}
+
+const containers = computed<ContainerSpec[]>(() =>
+  arr(spec.value.containers)
+    .map(obj)
+    .map((c) => {
+      const resources = obj(c.resources)
+      const requests = obj(resources.requests)
+      const limits = obj(resources.limits)
+      return {
+        name: str(c.name) ?? '?',
+        requestsCpu: str(requests.cpu),
+        requestsMem: str(requests.memory),
+        limitsCpu: str(limits.cpu),
+        limitsMem: str(limits.memory),
+      }
+    }),
+)
 
 const overview = computed(() => {
   const rows: { label: string; value: string }[] = []
@@ -138,6 +163,19 @@ const conditions = computed<ConditionRow[]>(() =>
 
 <template>
   <div class="pod-info-table">
+    <div v-if="teams?.length" class="d-flex flex-wrap ga-1 mb-3">
+      <v-chip
+        v-for="team in teams"
+        :key="team"
+        size="small"
+        color="watch"
+        variant="tonal"
+        prepend-icon="mdi-account-group"
+      >
+        {{ team }}
+      </v-chip>
+    </div>
+
     <div v-if="!podData" class="text-caption text-medium-emphasis">No pod data.</div>
     <template v-else>
       <v-table v-if="overview.length" density="compact" class="mb-4 info-table">
@@ -148,6 +186,30 @@ const conditions = computed<ConditionRow[]>(() =>
           </tr>
         </tbody>
       </v-table>
+
+      <div v-if="containers.length" class="mb-4">
+        <div class="text-caption text-medium-emphasis mb-1">Containers</div>
+        <v-table density="compact" class="info-table">
+          <thead>
+            <tr>
+              <th>Container</th>
+              <th class="text-right">CPU request</th>
+              <th class="text-right">CPU limit</th>
+              <th class="text-right">Mem request</th>
+              <th class="text-right">Mem limit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in containers" :key="c.name">
+              <td>{{ c.name }}</td>
+              <td class="text-right">{{ c.requestsCpu ?? '—' }}</td>
+              <td class="text-right">{{ c.limitsCpu ?? '—' }}</td>
+              <td class="text-right">{{ c.requestsMem ?? '—' }}</td>
+              <td class="text-right">{{ c.limitsMem ?? '—' }}</td>
+            </tr>
+          </tbody>
+        </v-table>
+      </div>
 
       <div v-if="restarts.length" class="mb-4">
         <div class="text-caption text-medium-emphasis mb-1">

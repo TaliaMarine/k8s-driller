@@ -90,8 +90,22 @@ defineEmits<{ goToNode: [nodeName: string] }>()
       <v-icon start icon="mdi-arrow-up-bold" />
       {{ highAllocationLabel(high) }}
     </v-chip>
-    <div v-if="showNodeLink" class="d-flex align-center ga-2 ml-auto pod-row-end">
+    <div
+      v-if="showNodeLink || pod.teams?.length"
+      class="d-flex align-center ga-2 ml-auto pod-row-end"
+    >
+      <v-chip
+        v-for="team in pod.teams"
+        :key="team"
+        size="x-small"
+        color="watch"
+        variant="tonal"
+        prepend-icon="mdi-account-group"
+      >
+        {{ team }}
+      </v-chip>
       <v-btn
+        v-if="showNodeLink"
         icon="mdi-server"
         size="x-small"
         variant="text"

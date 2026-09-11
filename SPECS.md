@@ -313,9 +313,16 @@ the two never drift apart). Left-side vertical tabs:
   DaemonSet/ReplicaSet/Job/CronJob — whichever `k8swatch.ControllerRef.Kind` resolved to), each rendered as
   a collapsible, syntax-highlighted YAML tree (expanded one level deep by default). Alongside — beside on
   wide viewports, stacked below on narrow ones — an info panel always reflects the pod itself regardless of
-  which manifest tab is active: age, phase, QoS class, node, per-container restart counts, termination/crash
-  detail (OOMKilled reason, exit code, `CrashLoopBackOff`-style waiting reasons) when present, and pod
-  conditions. Any field absent from the manifest is omitted rather than shown empty.
+  which manifest tab is active: team chip(s) (see below) on top, then age, phase, QoS class, node, each
+  container's configured requests/limits, per-container restart counts, termination/crash detail (OOMKilled
+  reason, exit code, `CrashLoopBackOff`-style waiting reasons) when present, and pod conditions. Any field
+  absent from the manifest is omitted rather than shown empty.
+
+Team attribution: `PodDTO.teams` (backend `extractTeams`, `internal/api/dto.go`) collects the distinct values
+of every pod label whose key contains "team" (case-insensitive — covers plain `team` as well as prefixed
+conventions like `app.kubernetes.io/team` or `owning-team`), deduplicated and sorted. Shown as chips both at
+the end of the collapsed pod row (next to the expansion chevron) and atop the Details tab's info panel — one
+computation, both places, rather than the frontend re-deriving it from the fetched manifest.
 
 Pod historical max (backing the Max bar/line above): the backend tracks each pod's peak CPU/memory usage
 in-memory for as long as it's been observed (`usagecache.Cache`), updated on every metrics-server poll.

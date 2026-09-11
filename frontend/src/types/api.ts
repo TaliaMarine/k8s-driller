@@ -70,6 +70,7 @@ export interface PodDTO {
   usageMem: number
   maxUsageCpu?: number
   maxUsageMem?: number
+  teams?: string[]
   wildWest: boolean
   oomRisk: boolean
   throttlingRisk: boolean

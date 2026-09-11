@@ -84,7 +84,7 @@ const podParsed = computed(() => parseYaml(manifest.value?.pod.yaml))
           <div v-else class="text-caption text-medium-emphasis">Unable to parse manifest YAML.</div>
         </v-col>
         <v-col cols="12" md="5" class="pod-info-col">
-          <PodInfoTable :pod-data="podParsed" />
+          <PodInfoTable :pod-data="podParsed" :teams="pod.teams" />
         </v-col>
       </v-row>
     </template>

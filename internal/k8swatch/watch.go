@@ -39,6 +39,7 @@ type PodInfo struct {
 	Controller     *ControllerRef // nil for a bare pod with no owning controller
 	ContainerNames []string
 	Containers     []pressure.ContainerResources // same order as ContainerNames
+	Labels         map[string]string
 }
 
 // NodeInfo is a node's identity and allocatable capacity.
@@ -292,6 +293,7 @@ func (s *Store) upsertPod(obj interface{}) {
 		Controller:     s.resolveController(pod),
 		ContainerNames: names,
 		Containers:     resources,
+		Labels:         pod.Labels,
 	}
 	s.mu.Lock()
 	s.pods[pod.Namespace+"/"+pod.Name] = info

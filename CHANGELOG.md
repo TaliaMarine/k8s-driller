@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.11.2...v2.12.0) (2026-09-11)
+
+
+### Features
+
+* add a per-pod honeycomb Distribution tab to the resource views ([af69971](https://github.com/TaliaMarine/k8s-driller/commit/af69971d4ca337e6b93dcec9da679dd6bfc276ad))
+
 ## [2.11.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.11.1...v2.11.2) (2026-09-11)
 
 

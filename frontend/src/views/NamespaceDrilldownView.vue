@@ -15,6 +15,7 @@ import NodeDistributionChart from '@/components/NodeDistributionChart.vue'
 import PodRow from '@/components/PodRow.vue'
 import PodDetailPanel from '@/components/PodDetailPanel.vue'
 import TreemapPanel from '@/components/TreemapPanel.vue'
+import HexDistribution from '@/components/HexDistribution.vue'
 import type { TreemapItem } from '@/utils/treemap'
 
 const props = defineProps<{ name: string }>()
@@ -86,6 +87,12 @@ function clearAllFilters() {
   clearFilters()
   selectedWorkloadKey.value = null
 }
+
+function selectPod(name: string) {
+  clearFilters()
+  search.value = name
+  selectedWorkloadKey.value = null
+}
 </script>
 
 <template>
@@ -112,6 +119,7 @@ function clearAllFilters() {
         <v-tabs v-model="resourceTab" direction="vertical" color="watch" class="resource-tabs">
           <v-tab value="treemap" prepend-icon="mdi-chart-tree">By workload</v-tab>
           <v-tab value="bars" prepend-icon="mdi-chart-bar">Bars</v-tab>
+          <v-tab value="distribution" prepend-icon="mdi-hexagon-outline">Distribution</v-tab>
         </v-tabs>
         <v-window v-model="resourceTab" class="flex-grow-1">
           <v-window-item value="treemap">
@@ -161,6 +169,24 @@ function clearAllFilters() {
                 :format="formatMem"
                 :selected-key="selectedWorkloadKey"
                 @select="selectWorkload"
+              />
+            </v-card-text>
+          </v-window-item>
+          <v-window-item value="distribution">
+            <v-card-text>
+              <HexDistribution
+                label="CPU"
+                :pods="nsPods"
+                resource="cpu"
+                :format="formatCpu"
+                @select="selectPod"
+              />
+              <HexDistribution
+                label="Memory"
+                :pods="nsPods"
+                resource="mem"
+                :format="formatMem"
+                @select="selectPod"
               />
             </v-card-text>
           </v-window-item>

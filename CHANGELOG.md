@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.14.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.14.1...v2.14.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* deadlock in upsertPod for every ReplicaSet-owned (Deployment) pod ([bc5b6f4](https://github.com/TaliaMarine/k8s-driller/commit/bc5b6f453b988489c5ae151425d4367059cb18cb))
+
 ## [2.14.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.14.0...v2.14.1) (2026-09-11)
 
 

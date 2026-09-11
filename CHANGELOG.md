@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.14.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.14.0...v2.14.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* cap terminal (dead) pods in Distribution to the same 60s grace period ([3abbe30](https://github.com/TaliaMarine/k8s-driller/commit/3abbe3016d2c6a59fc1074b4c4485bdd15b8083a))
+
 ## [2.14.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.13.0...v2.14.0) (2026-09-11)
 
 

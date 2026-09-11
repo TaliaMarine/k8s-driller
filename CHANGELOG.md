@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.11.1...v2.11.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* group the CPU/Memory share pies side by side and enlarge them ([88d1eba](https://github.com/TaliaMarine/k8s-driller/commit/88d1eba0f51aed79b0e05f18a341dd69c6084e7c))
+
 ## [2.11.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.11.0...v2.11.1) (2026-09-11)
 
 

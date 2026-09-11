@@ -336,6 +336,14 @@ func (s *Store) upsertPod(obj interface{}) {
 	phase := string(pod.Status.Phase)
 	key := pod.Namespace + "/" + pod.Name
 
+	// Resolved before taking the write lock below — for a ReplicaSet-owned
+	// pod (i.e. every Deployment-managed pod) this takes s.mu's read lock
+	// internally, and sync.RWMutex isn't reentrant: doing that while
+	// already holding the write lock would deadlock this goroutine (and
+	// with it every subsequent pod/node/replicaset informer event, since
+	// they share one handler goroutine per informer).
+	controller := s.resolveController(pod)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -356,7 +364,7 @@ func (s *Store) upsertPod(obj interface{}) {
 		Ready:             podReady(pod),
 		CreationTimestamp: pod.CreationTimestamp.Time,
 		TerminalAt:        terminalAt,
-		Controller:        s.resolveController(pod),
+		Controller:        controller,
 		ContainerNames:    names,
 		Containers:        resources,
 		Labels:            pod.Labels,

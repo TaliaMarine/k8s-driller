@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.10.0...v2.11.0) (2026-09-11)
+
+
+### Features
+
+* add pod share pie, danger-zone bars, historical max tracking, and a manifest Details tab ([f64ec17](https://github.com/TaliaMarine/k8s-driller/commit/f64ec17172b9a34134ab7e3a71a759f643351966))
+
 ## [2.10.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.9.0...v2.10.0) (2026-09-08)
 
 

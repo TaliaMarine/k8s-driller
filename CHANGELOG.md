@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.14.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.13.0...v2.14.0) (2026-09-11)
+
+
+### Features
+
+* add a By Node/Bars/Distribution panel to the Nodes dashboard ([0a4ee78](https://github.com/TaliaMarine/k8s-driller/commit/0a4ee7865cb6703cf101e30ad819f38152510f30))
+* order Distribution honeycomb by pod age, gray not-Ready/deleted pods ([867659b](https://github.com/TaliaMarine/k8s-driller/commit/867659b498883a0be002ffbff238e585ed28dbcf))
+* show per-container resources and team labels in pod Details/row ([892cec6](https://github.com/TaliaMarine/k8s-driller/commit/892cec6742828e33b1e5b77ff36c5cd96e57e9d8))
+
+
+### Bug Fixes
+
+* lay out the CPU/Memory ring gauges side by side by default ([7b179b3](https://github.com/TaliaMarine/k8s-driller/commit/7b179b34fbb01b8fe148293dd3225906d5365a47))
+* round formatCpu's sub-1000m branch instead of interpolating it raw ([92b1e63](https://github.com/TaliaMarine/k8s-driller/commit/92b1e63d1ebf07bdceb87d55de5a16837eded7ae))
+
 ## [2.13.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.12.0...v2.13.0) (2026-09-11)
 
 

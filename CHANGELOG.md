@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.11.0...v2.11.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* don't block startup on the Prometheus max-seeding query ([c45c735](https://github.com/TaliaMarine/k8s-driller/commit/c45c735767513a960c0a73e719b4e0937472f199))
+
 ## [2.11.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.10.0...v2.11.0) (2026-09-11)
 
 

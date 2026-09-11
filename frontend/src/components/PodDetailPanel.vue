@@ -90,24 +90,28 @@ function exportForAI() {
     <v-col class="pod-detail-content">
       <v-window v-model="tab">
         <v-window-item value="charts">
-          <RingGauge
-            label="CPU"
-            :usage="pod.usageCpu"
-            :request="containerAllocation(pod, 'requestsCpu') || undefined"
-            :limit="containerAllocation(pod, 'limitsCpu') || undefined"
-            :max-usage="pod.maxUsageCpu"
-            :format="formatCpu"
-            :danger="pod.throttlingRisk"
-          />
-          <RingGauge
-            label="Memory"
-            :usage="pod.usageMem"
-            :request="containerAllocation(pod, 'requestsMem') || undefined"
-            :limit="containerAllocation(pod, 'limitsMem') || undefined"
-            :max-usage="pod.maxUsageMem"
-            :format="formatMem"
-            :danger="pod.oomRisk"
-          />
+          <div class="ring-gauge-pair">
+            <RingGauge
+              label="CPU"
+              class="ring-gauge-pair-item"
+              :usage="pod.usageCpu"
+              :request="containerAllocation(pod, 'requestsCpu') || undefined"
+              :limit="containerAllocation(pod, 'limitsCpu') || undefined"
+              :max-usage="pod.maxUsageCpu"
+              :format="formatCpu"
+              :danger="pod.throttlingRisk"
+            />
+            <RingGauge
+              label="Memory"
+              class="ring-gauge-pair-item"
+              :usage="pod.usageMem"
+              :request="containerAllocation(pod, 'requestsMem') || undefined"
+              :limit="containerAllocation(pod, 'limitsMem') || undefined"
+              :max-usage="pod.maxUsageMem"
+              :format="formatMem"
+              :danger="pod.oomRisk"
+            />
+          </div>
         </v-window-item>
 
         <v-window-item value="analysis">
@@ -312,6 +316,19 @@ function exportForAI() {
 }
 .pod-detail-content {
   min-width: 0;
+}
+/* CPU/Memory side by side by default; wraps to stacked once the available
+   container width can't fit both at a readable size — a container-width
+   check via flex-wrap, not a viewport breakpoint, since this panel can sit
+   inside a narrow column regardless of how wide the browser window is. */
+.ring-gauge-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.ring-gauge-pair-item {
+  flex: 1 1 320px;
+  min-width: 320px;
 }
 .stats-table {
   background: transparent;

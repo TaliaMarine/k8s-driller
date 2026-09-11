@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.15.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.14.2...v2.15.0) (2026-09-11)
+
+
+### Features
+
+* pool sibling pods' history for Analysis and startup max-seeding ([bb023ed](https://github.com/TaliaMarine/k8s-driller/commit/bb023edd46f677d70a99ab446ca24c6fbe5cd704))
+
 ## [2.14.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.14.1...v2.14.2) (2026-09-11)
 
 

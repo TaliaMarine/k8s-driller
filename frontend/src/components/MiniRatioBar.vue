@@ -52,12 +52,23 @@ const tooltip = computed(() => {
   const denomLabel = props.limits ? 'limit' : 'requests × 2'
   return `${props.label}: ${props.format(props.usage)} / ${props.format(denom.value!)} ${denomLabel}`
 })
+
+// The track itself (not the usage fill) is tinted to show where the danger
+// zone is: everything past the marker (the effective requests reference
+// point) is the stretch where a pod is already eating into limit/ceiling
+// headroom, so it reads as a faint red zone instead of neutral gray.
+const trackStyle = computed(() => {
+  if (markerPct.value == null) return {}
+  return {
+    background: `linear-gradient(to right, rgb(var(--v-theme-surface-variant)) 0%, rgb(var(--v-theme-surface-variant)) ${markerPct.value}%, rgba(var(--v-theme-critical), 0.22) ${markerPct.value}%, rgba(var(--v-theme-critical), 0.22) 100%)`,
+  }
+})
 </script>
 
 <template>
   <div class="mini-ratio-bar" :title="tooltip">
     <v-icon :icon="icon" size="12" class="mini-ratio-icon" />
-    <div v-if="hasBar" class="mini-ratio-track">
+    <div v-if="hasBar" class="mini-ratio-track" :style="trackStyle">
       <div class="mini-ratio-fill" :class="`bg-${color}`" :style="{ width: `${widthPct}%` }" />
       <div v-if="markerPct != null" class="mini-ratio-marker" :style="{ left: `${markerPct}%` }" />
     </div>
@@ -77,10 +88,9 @@ const tooltip = computed(() => {
 }
 .mini-ratio-track {
   position: relative;
-  width: 44px;
+  width: 110px;
   height: 6px;
   border-radius: 3px;
-  background: rgb(var(--v-theme-surface-variant));
   overflow: hidden;
 }
 .mini-ratio-fill {

@@ -232,7 +232,13 @@ function clearAllFilters() {
       <v-expansion-panels v-model="openPanels" multiple variant="accordion">
         <v-expansion-panel v-for="pod in group.pods" :key="podKey(pod)" :value="podKey(pod)">
           <v-expansion-panel-title>
-            <PodRow :pod="pod" show-node-link @go-to-node="goToNode" />
+            <PodRow
+              :pod="pod"
+              show-node-link
+              :cpu-total="summary.usageCpu"
+              :mem-total="summary.usageMem"
+              @go-to-node="goToNode"
+            />
           </v-expansion-panel-title>
           <v-expansion-panel-text>
             <PodDetailPanel :pod="pod" />

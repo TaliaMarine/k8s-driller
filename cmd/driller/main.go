@@ -57,6 +57,12 @@ const throttlingHistorySize = 10
 // — see k8swatch.New's doc comment for the production incident this fixes.
 const recomputeDebounce = 500 * time.Millisecond
 
+// seedMaxLookback is how far back the startup pod-max seeding query looks
+// (see seedUsageMaxFromProm) — a month is enough to capture most workloads'
+// periodic peaks without the underlying Prometheus subquery scanning an
+// unbounded range.
+const seedMaxLookback = 30 * 24 * time.Hour
+
 // clientQPS/clientBurst replace client-go's conservative defaults (5 QPS /
 // burst 10), which are sized for a single-purpose client, not a cluster-wide
 // watcher across nodes, pods, deployments, replicasets, statefulsets, and
@@ -166,6 +172,7 @@ func run(log *slog.Logger) error {
 		Usage:                       usage,
 		Prom:                        prom,
 		CRDs:                        crds,
+		Dynamic:                     dynamicClient,
 		Sessions:                    sessions,
 		AuthN:                       authenticator,
 		Hub:                         hub,
@@ -181,6 +188,8 @@ func run(log *slog.Logger) error {
 	}
 	appmetrics.InformerSynced.Set(1)
 	log.Info("informer caches synced")
+
+	seedUsageMaxFromProm(ctx, log, prom, watchStore, usage)
 
 	srv.StartAlertWorker(ctx)
 
@@ -246,6 +255,39 @@ func pollMetrics(ctx context.Context, log *slog.Logger, client metricsclient.Cli
 			srv.Recompute("metrics poll")
 		}
 	}
+}
+
+// seedUsageMaxFromProm pre-populates each known pod's historical peak
+// CPU/memory (usagecache.Cache.SeedMax) from Prometheus before the live
+// metrics-server poll loop starts, so a freshly (re)started backend doesn't
+// forget weeks of prior peak usage. When Prometheus has no data for a pod
+// (or isn't configured/reachable at all), that pod's max is simply left
+// unseeded — usagecache.Update then bootstraps it from the pod's first
+// live-polled usage instead, once pollMetrics starts.
+func seedUsageMaxFromProm(ctx context.Context, log *slog.Logger, prom *promclient.Client, watch *k8swatch.Store, usage *usagecache.Cache) {
+	cpuMax, err := prom.MaxAllPodsCPU(ctx, seedMaxLookback)
+	if err != nil && !errors.Is(err, promclient.ErrNotConfigured) {
+		log.Warn("seed pod max cpu from prometheus failed", "error", err)
+	}
+	memMax, err := prom.MaxAllPodsMemory(ctx, seedMaxLookback)
+	if err != nil && !errors.Is(err, promclient.ErrNotConfigured) {
+		log.Warn("seed pod max memory from prometheus failed", "error", err)
+	}
+	if len(cpuMax) == 0 && len(memMax) == 0 {
+		return
+	}
+	seeded := 0
+	for _, n := range watch.Nodes() {
+		for _, p := range watch.PodsOnNode(n.Name) {
+			key := p.Namespace + "/" + p.Name
+			if cpuMax[key] == 0 && memMax[key] == 0 {
+				continue
+			}
+			usage.SeedMax(p.Namespace, p.Name, cpuMax[key], memMax[key])
+			seeded++
+		}
+	}
+	log.Info("seeded pod max usage from prometheus", "pods", seeded)
 }
 
 func mountStaticFrontend(mux *http.ServeMux, log *slog.Logger) {

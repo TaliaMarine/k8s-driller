@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"k8s.io/client-go/dynamic"
+
 	"github.com/TaliaMarine/k8s-driller/internal/alerts"
 	"github.com/TaliaMarine/k8s-driller/internal/auth"
 	"github.com/TaliaMarine/k8s-driller/internal/crdstore"
@@ -27,6 +29,7 @@ type Server struct {
 	usage    *usagecache.Cache
 	prom     *promclient.Client
 	crds     *crdstore.Store
+	dynamic  dynamic.Interface
 	sessions *auth.SessionManager
 	authN    *auth.Authenticator
 	hub      *sse.Hub
@@ -58,6 +61,7 @@ type Deps struct {
 	Usage                       *usagecache.Cache
 	Prom                        *promclient.Client
 	CRDs                        *crdstore.Store
+	Dynamic                     dynamic.Interface
 	Sessions                    *auth.SessionManager
 	AuthN                       *auth.Authenticator
 	Hub                         *sse.Hub
@@ -74,6 +78,7 @@ func NewServer(d Deps) *Server {
 		usage:                  d.Usage,
 		prom:                   d.Prom,
 		crds:                   d.CRDs,
+		dynamic:                d.Dynamic,
 		sessions:               d.Sessions,
 		authN:                  d.AuthN,
 		hub:                    d.Hub,
@@ -124,6 +129,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/pods/{namespace}/{name}", s.sessions.RequireAuth(s.handlePodDetail))
 	mux.HandleFunc("GET /api/v1/pods/{namespace}/{name}/recommendation", s.sessions.RequireAuth(s.handlePodRecommendation))
 	mux.HandleFunc("GET /api/v1/pods/{namespace}/{name}/analysis", s.sessions.RequireAuth(s.handlePodAnalysis))
+	mux.HandleFunc("GET /api/v1/pods/{namespace}/{name}/manifest", s.sessions.RequireAuth(s.handlePodManifest))
 	mux.HandleFunc("GET /api/v1/history/nodes/{name}", s.sessions.RequireAuth(s.handleNodeHistory))
 
 	mux.HandleFunc("GET /api/v1/stream/cluster", s.sessions.RequireAuth(s.handleStreamCluster))

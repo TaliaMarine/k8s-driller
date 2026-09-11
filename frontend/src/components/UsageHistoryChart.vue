@@ -7,6 +7,7 @@ const props = defineProps<{
   samples: Sample[]
   requestValue?: number
   limitValue?: number
+  maxValue?: number
   format: (v: number) => string
 }>()
 
@@ -24,7 +25,14 @@ const PAD_TOP = 6
 
 const values = computed(() => props.samples.map((s) => s.v))
 const scaleMax = computed(
-  () => Math.max(...values.value, props.requestValue ?? 0, props.limitValue ?? 0, 1) * 1.08,
+  () =>
+    Math.max(
+      ...values.value,
+      props.requestValue ?? 0,
+      props.limitValue ?? 0,
+      props.maxValue ?? 0,
+      1,
+    ) * 1.08,
 )
 
 function yFor(v: number): number {
@@ -47,6 +55,7 @@ const areaPath = computed(() => {
 
 const requestY = computed(() => (props.requestValue != null ? yFor(props.requestValue) : undefined))
 const limitY = computed(() => (props.limitValue != null ? yFor(props.limitValue) : undefined))
+const maxY = computed(() => (props.maxValue != null ? yFor(props.maxValue) : undefined))
 
 const hover = reactive<{ visible: boolean; x: number; value: number; t: string }>({
   visible: false,
@@ -100,6 +109,7 @@ function onLeave() {
           :x2="VIEW_W"
           :y2="requestY"
         />
+        <line v-if="maxY != null" class="max-line" x1="0" :y1="maxY" :x2="VIEW_W" :y2="maxY" />
         <path class="area" :d="areaPath" />
         <path class="line" :d="linePath" />
         <line
@@ -124,6 +134,7 @@ function onLeave() {
       <span><span class="swatch swatch-usage" /> Usage</span>
       <span v-if="requestValue != null"><span class="swatch swatch-request" /> Request</span>
       <span v-if="limitValue != null"><span class="swatch swatch-limit" /> Limit</span>
+      <span v-if="maxValue != null"><span class="swatch swatch-max" /> Max</span>
     </div>
   </div>
 </template>
@@ -159,6 +170,12 @@ function onLeave() {
 .limit-line {
   stroke: rgb(var(--v-theme-on-surface));
   stroke-opacity: 0.35;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.max-line {
+  stroke: rgb(var(--v-theme-critical));
+  stroke-opacity: 0.45;
   stroke-width: 1.5;
   stroke-dasharray: 6 4;
 }
@@ -206,6 +223,12 @@ function onLeave() {
 }
 .swatch-limit {
   border-bottom: 2px dashed rgba(var(--v-theme-on-surface), 0.5);
+  background: transparent;
+  height: 0;
+  vertical-align: middle;
+}
+.swatch-max {
+  border-bottom: 2px dashed rgba(var(--v-theme-critical), 0.6);
   background: transparent;
   height: 0;
   vertical-align: middle;

@@ -298,7 +298,7 @@ function clearAllFilters() {
       <v-expansion-panels v-model="openPanels" multiple variant="accordion">
         <v-expansion-panel v-for="pod in group.pods" :key="podKey(pod)" :value="podKey(pod)">
           <v-expansion-panel-title>
-            <PodRow :pod="pod" />
+            <PodRow :pod="pod" :cpu-total="node?.capacityCpu" :mem-total="node?.capacityMemory" />
           </v-expansion-panel-title>
           <v-expansion-panel-text>
             <PodDetailPanel :pod="pod" />

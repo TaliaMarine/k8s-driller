@@ -24,6 +24,8 @@ type podAggregate struct {
 	cpu        int64 // latest aggregate CPU usage (millicores), summed across containers
 	mem        int64 // latest aggregate memory usage (bytes), summed across containers
 	cpuHistory []int64
+	maxCPU     int64 // historical peak of cpu, ever observed since this pod first appeared here
+	maxMem     int64 // historical peak of mem, same lifetime as maxCPU
 }
 
 func New(maxHistory int) *Cache {
@@ -57,14 +59,59 @@ func (c *Cache) Update(nodes []metricsclient.NodeUsage, pods []metricsclient.Pod
 			cpu += ctr.CPU
 			mem += ctr.Memory
 		}
-		history := c.pods[key].cpuHistory
+		prev := c.pods[key]
+		history := prev.cpuHistory
 		history = append(history, cpu)
 		if len(history) > c.maxHistory {
 			history = history[len(history)-c.maxHistory:]
 		}
-		next[key] = podAggregate{cpu: cpu, mem: mem, cpuHistory: history}
+		maxCPU := prev.maxCPU
+		if cpu > maxCPU {
+			maxCPU = cpu
+		}
+		maxMem := prev.maxMem
+		if mem > maxMem {
+			maxMem = mem
+		}
+		next[key] = podAggregate{cpu: cpu, mem: mem, cpuHistory: history, maxCPU: maxCPU, maxMem: maxMem}
 	}
 	c.pods = next
+}
+
+// SeedMax pre-populates a pod's historical peak CPU/memory before any
+// metrics-server poll has run — called once at startup with a Prometheus
+// max_over_time lookback, so a freshly (re)started backend doesn't forget
+// weeks of prior peak usage. A no-op in whichever direction the given value
+// isn't actually higher than what's already recorded, so seeding can run
+// safely regardless of whether it happens before or after the first
+// Update() (e.g. pod already has a live-polled max by the time Prometheus
+// history for it comes back).
+func (c *Cache) SeedMax(namespace, name string, maxCPU, maxMem int64) {
+	key := namespace + "/" + name
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	agg := c.pods[key]
+	if maxCPU > agg.maxCPU {
+		agg.maxCPU = maxCPU
+	}
+	if maxMem > agg.maxMem {
+		agg.maxMem = maxMem
+	}
+	c.pods[key] = agg
+}
+
+// PodMax returns one pod's historical peak CPU (millicores) and memory
+// (bytes) usage recorded since it was first observed, either from live
+// polls or seeded from Prometheus at startup — the reference value behind
+// the pod detail Charts tab's Max bar.
+func (c *Cache) PodMax(namespace, name string) (maxCPU, maxMem int64, ok bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	agg, found := c.pods[namespace+"/"+name]
+	if !found {
+		return 0, 0, false
+	}
+	return agg.maxCPU, agg.maxMem, true
 }
 
 // Node returns the latest usage for one node.

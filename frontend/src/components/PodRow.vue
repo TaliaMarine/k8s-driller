@@ -9,30 +9,50 @@ import {
   missingChips,
 } from '@/composables/usePodFilters'
 import MiniRatioBar from './MiniRatioBar.vue'
+import PieRatio from './PieRatio.vue'
 
-defineProps<{ pod: PodDTO; showNodeLink?: boolean }>()
+defineProps<{
+  pod: PodDTO
+  showNodeLink?: boolean
+  // Denominators for the share-of-whole pie next to each bar: node capacity
+  // on the node drilldown, ready-node cluster capacity on Workloads, or
+  // namespace-wide usage on the namespace drilldown — see each view.
+  cpuTotal?: number
+  memTotal?: number
+}>()
 defineEmits<{ goToNode: [nodeName: string] }>()
 </script>
 
 <template>
   <div class="d-flex align-center ga-2 flex-wrap pod-row">
     <div class="d-flex flex-column ga-1 pod-usage-stack">
-      <MiniRatioBar
-        label="CPU"
-        icon="mdi-cpu-64-bit"
-        :usage="pod.usageCpu"
-        :requests="containerAllocation(pod, 'requestsCpu') || undefined"
-        :limits="containerAllocation(pod, 'limitsCpu') || undefined"
-        :format="formatCpu"
-      />
-      <MiniRatioBar
-        label="Memory"
-        icon="mdi-memory"
-        :usage="pod.usageMem"
-        :requests="containerAllocation(pod, 'requestsMem') || undefined"
-        :limits="containerAllocation(pod, 'limitsMem') || undefined"
-        :format="formatMem"
-      />
+      <div class="d-flex align-center ga-2">
+        <PieRatio label="CPU share" :value="pod.usageCpu" :total="cpuTotal" :format="formatCpu" />
+        <MiniRatioBar
+          label="CPU"
+          icon="mdi-cpu-64-bit"
+          :usage="pod.usageCpu"
+          :requests="containerAllocation(pod, 'requestsCpu') || undefined"
+          :limits="containerAllocation(pod, 'limitsCpu') || undefined"
+          :format="formatCpu"
+        />
+      </div>
+      <div class="d-flex align-center ga-2">
+        <PieRatio
+          label="Memory share"
+          :value="pod.usageMem"
+          :total="memTotal"
+          :format="formatMem"
+        />
+        <MiniRatioBar
+          label="Memory"
+          icon="mdi-memory"
+          :usage="pod.usageMem"
+          :requests="containerAllocation(pod, 'requestsMem') || undefined"
+          :limits="containerAllocation(pod, 'limitsMem') || undefined"
+          :format="formatMem"
+        />
+      </div>
     </div>
     <v-icon
       v-if="pod.wildWest"

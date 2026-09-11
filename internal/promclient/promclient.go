@@ -80,6 +80,58 @@ func (c *Client) scalarQuery(ctx context.Context, query string) (int64, bool, er
 	return int64(vector[0].Value), true, nil
 }
 
+// MaxAllPodsCPU returns the max_over_time CPU usage (millicores) of every
+// pod Prometheus has data for, over lookback, in one bulk query rather than
+// one per pod — used once at startup to seed usagecache's historical max
+// before the first metrics-server poll has run. Keyed by "namespace/pod".
+func (c *Client) MaxAllPodsCPU(ctx context.Context, lookback time.Duration) (map[string]int64, error) {
+	if !c.configured() {
+		return nil, ErrNotConfigured
+	}
+	query := fmt.Sprintf(
+		`max_over_time(sum by (namespace,pod) (rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m]))[%s:5m]) * 1000`,
+		lookback.String(),
+	)
+	return c.vectorByPod(ctx, query)
+}
+
+// MaxAllPodsMemory returns the max_over_time working-set memory usage
+// (bytes) of every pod Prometheus has data for, over lookback, in one bulk
+// query. Keyed by "namespace/pod".
+func (c *Client) MaxAllPodsMemory(ctx context.Context, lookback time.Duration) (map[string]int64, error) {
+	if !c.configured() {
+		return nil, ErrNotConfigured
+	}
+	query := fmt.Sprintf(
+		`max_over_time(sum by (namespace,pod) (container_memory_working_set_bytes{container!="",container!="POD"})[%s:5m])`,
+		lookback.String(),
+	)
+	return c.vectorByPod(ctx, query)
+}
+
+// vectorByPod runs an instant query expected to return one sample per
+// namespace/pod pair and indexes the result by "namespace/pod".
+func (c *Client) vectorByPod(ctx context.Context, query string) (map[string]int64, error) {
+	value, _, err := c.api.Query(ctx, query, time.Time{})
+	if err != nil {
+		return nil, fmt.Errorf("prometheus query: %w", err)
+	}
+	vector, ok := value.(model.Vector)
+	if !ok {
+		return nil, nil
+	}
+	out := make(map[string]int64, len(vector))
+	for _, sample := range vector {
+		namespace := string(sample.Metric["namespace"])
+		pod := string(sample.Metric["pod"])
+		if namespace == "" || pod == "" {
+			continue
+		}
+		out[namespace+"/"+pod] = int64(sample.Value)
+	}
+	return out, nil
+}
+
 // PodCPUUsageRange returns the pod's combined-container CPU usage series in
 // millicores over [start, end], for the Analysis tab's historical stats and
 // recommendations (SPECS.md §9 recommendation logic, extended with the

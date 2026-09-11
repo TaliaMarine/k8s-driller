@@ -229,6 +229,7 @@ All endpoints under `/api/v1`, JSON, session-cookie authenticated (except `/heal
 | GET | `/api/v1/pods/{namespace}/{name}` | viewer | Pod detail: usage/request/limit triple, pressure tags |
 | GET | `/api/v1/pods/{namespace}/{name}/recommendation` | viewer | Simple Prometheus-derived recommendation: `p95` usage over a fixed lookback (default 24h) plus a flat headroom (404 if Prometheus unconfigured or insufficient history) |
 | GET | `/api/v1/pods/{namespace}/{name}/analysis` | viewer | Analysis tab payload: up to 30 days of raw usage samples, summary statistics, and the CV-weighted/peak-bucketed recommendation (§9.1) (404 if Prometheus unconfigured or no history) |
+| GET | `/api/v1/pods/{namespace}/{name}/manifest` | viewer | Details tab payload: the pod's raw manifest as YAML, plus its owning controller's raw manifest as YAML if it has one (both fetched read-only via the dynamic client; `metadata.managedFields` stripped) |
 | GET | `/api/v1/history/nodes/{name}` | viewer | Historical trend series for charts (Prometheus-backed) |
 | GET | `/api/v1/auth/me` | any authenticated | Current user, role, session expiry |
 | POST | `/api/v1/auth/login` \| `/callback` | public | OIDC flow |
@@ -268,11 +269,19 @@ menu items appear on the right, so it doesn't visually drift depending on role.
    - "Wild West" list — pods missing request/limit, chips per missing dimension.
    - Workload list grouped by namespace → controller (Deployment/StatefulSet/DaemonSet/bare Pod), filterable
      by name, namespace, and misconfiguration/pressure state via a dropdown multi-select (kept out of the
-     main row once the filter set grew past what fits on one line). Each row shows tiny per-resource
-     usage/request ratio bars even when collapsed, and expands into the Pod Detail Panel (§7.1.1).
+     main row once the filter set grew past what fits on one line). Each row shows, per resource, a tiny
+     "share of node" pie (this pod's usage as a percentage of the node's capacity) followed by the
+     usage/request ratio bar; the bar's track is split at the request/effective-ceiling marker, gray to its
+     left and a faint red "danger zone" tint from the marker to 100%. Rows expand into the Pod Detail Panel
+     (§7.1.1).
 3. **Workloads** (`/workloads`, "Workloads" tab) — the same namespace → controller grouped, filterable pod
-   list as the Node Drilldown, but cluster-wide across every node at once instead of scoped to one. Each row
-   additionally has a right-aligned button to jump to the node it's scheduled on.
+   list as the Node Drilldown, but cluster-wide across every node at once instead of scoped to one. Each
+   row's pie is scoped to the whole cluster instead of one node — usage as a percentage of total capacity
+   across Ready nodes only (a Not Ready node's capacity isn't actually usable right now). Each row
+   additionally has a right-aligned button to jump to the node it's scheduled on. The Namespace Drilldown
+   (linked from a Namespaces list, not detailed separately here) reuses the same row, but scopes its pie to
+   that namespace's own total usage rather than any capacity figure, since a namespace has no capacity of
+   its own.
 4. **Role Management** (`/admin/users`, admin-only) — table of OIDC users with role dropdown; the
    first-ever admin promotion flow (using the bootstrap token) is a distinct, clearly-labeled one-time
    screen, not mixed into routine role editing.
@@ -285,16 +294,33 @@ menu items appear on the right, so it doesn't visually drift depending on role.
 Shown inside an expanded pod row on both the Node Drilldown and Workloads views (one shared component, so
 the two never drift apart). Left-side vertical tabs:
 
-- **Charts** — the Delta Visualizer (three-way usage/request/limit bars) and pressure-state chips
-  (OOM-Risk / Throttling-Risk).
+- **Charts** — the Delta Visualizer, now a four-way usage/request/limit/max bars and pressure-state chips
+  (OOM-Risk / Throttling-Risk). The Max bar is the pod's historical peak usage (see below), rendered in a
+  toned-down red so it reads as a reference line rather than a live status.
 - **Analysis** — not fetched until an explicit "Analyse" button is clicked, since it drives a Prometheus
   range query over up to 30 days per pod rather than the always-on live path. Once run, shows: a usage
-  history chart per resource (with dashed request/limit reference lines); a stats table (avg/median/min/max/
-  p90 against the current request/limit); the derived recommendation with a plain-language rationale (§9.1);
-  Wasteful/Under-provisioned chips; and an "Export raw data for AI" button that downloads the fetched
-  analysis (raw samples, stats, and recommendation) plus the pod's spec and a short description of the app
-  as a JSON file, so a user can feed it to a local AI assistant without that assistant ever touching the
-  cluster itself.
+  history chart per resource (with dashed request/limit reference lines, plus a dashed red-ish reference
+  line for the series' own observed max); a stats table (avg/median/min/max/p90 against the current
+  request/limit); the derived recommendation with a plain-language rationale (§9.1); Wasteful/Under-
+  provisioned chips; and an "Export raw data for AI" button that downloads the fetched analysis (raw
+  samples, stats, and recommendation) plus the pod's spec and a short description of the app as a JSON
+  file, so a user can feed it to a local AI assistant without that assistant ever touching the cluster
+  itself.
+- **Details** — fetched automatically the first time this tab is shown (a couple of cheap dynamic-client
+  `Get`s, not a Prometheus query, so unlike Analysis there's no reason to gate it behind a button). Top
+  tabs switch between the pod's own manifest and its owning controller's manifest (Deployment/StatefulSet/
+  DaemonSet/ReplicaSet/Job/CronJob — whichever `k8swatch.ControllerRef.Kind` resolved to), each rendered as
+  a collapsible, syntax-highlighted YAML tree (expanded one level deep by default). Alongside — beside on
+  wide viewports, stacked below on narrow ones — an info panel always reflects the pod itself regardless of
+  which manifest tab is active: age, phase, QoS class, node, per-container restart counts, termination/crash
+  detail (OOMKilled reason, exit code, `CrashLoopBackOff`-style waiting reasons) when present, and pod
+  conditions. Any field absent from the manifest is omitted rather than shown empty.
+
+Pod historical max (backing the Max bar/line above): the backend tracks each pod's peak CPU/memory usage
+in-memory for as long as it's been observed (`usagecache.Cache`), updated on every metrics-server poll.
+At startup, before the first poll, it's seeded once from Prometheus's `max_over_time` over the last 30 days
+(one bulk query per resource, not one per pod); pods Prometheus has no data for — or when Prometheus isn't
+configured at all — simply bootstrap their max from their own first live-polled usage instead.
 
 ### 7.2 Visual language
 
@@ -355,6 +381,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]   # owning controllers of Job/CronJob-managed pods (Pod Detail Details tab)
   - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes", "pods"]
     verbs: ["get", "list"]

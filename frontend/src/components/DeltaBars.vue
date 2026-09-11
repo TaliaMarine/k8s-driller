@@ -6,16 +6,19 @@ const props = defineProps<{
   usage: number
   request?: number
   limit?: number
+  maxUsage?: number
   format: (v: number) => string
   danger?: boolean // OOM-Risk / Throttling-Risk highlight (SPECS.md §2.3)
 }>()
 
 /**
  * The Delta Visualizer: Real Usage <-> Configured Request <-> Configured
- * Limit, three bars scaled to the same max so the gap is visible at a
- * glance (SPECS.md §2.3).
+ * Limit <-> historical peak Usage, four bars scaled to the same max so the
+ * gap is visible at a glance (SPECS.md §2.3).
  */
-const max = computed(() => Math.max(props.usage, props.request ?? 0, props.limit ?? 0, 1))
+const max = computed(() =>
+  Math.max(props.usage, props.request ?? 0, props.limit ?? 0, props.maxUsage ?? 0, 1),
+)
 const pct = (v?: number) => (v == null ? 0 : (v / max.value) * 100)
 </script>
 
@@ -37,10 +40,20 @@ const pct = (v?: number) => (v == null ? 0 : (v / max.value) * 100)
       <v-progress-linear :model-value="pct(request)" height="10" color="watch" rounded />
       <span class="delta-row-value">{{ request != null ? format(request) : '—' }}</span>
     </div>
-    <div class="d-flex align-center ga-2">
+    <div class="d-flex align-center ga-2" :class="{ 'mb-1': maxUsage != null }">
       <span class="delta-row-label">Limit</span>
       <v-progress-linear :model-value="pct(limit)" height="10" color="grey" rounded />
       <span class="delta-row-value">{{ limit != null ? format(limit) : '—' }}</span>
+    </div>
+    <div v-if="maxUsage != null" class="d-flex align-center ga-2">
+      <span class="delta-row-label">Max</span>
+      <v-progress-linear
+        :model-value="pct(maxUsage)"
+        height="10"
+        color="rgba(198, 40, 40, 0.55)"
+        rounded
+      />
+      <span class="delta-row-value">{{ format(maxUsage) }}</span>
     </div>
   </div>
 </template>

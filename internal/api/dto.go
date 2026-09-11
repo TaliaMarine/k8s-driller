@@ -50,6 +50,8 @@ type PodDTO struct {
 	Containers     []ContainerDTO    `json:"containers"`
 	UsageCPU       int64             `json:"usageCpu"`
 	UsageMem       int64             `json:"usageMem"`
+	MaxUsageCPU    *int64            `json:"maxUsageCpu,omitempty"`
+	MaxUsageMem    *int64            `json:"maxUsageMem,omitempty"`
 	WildWest       bool              `json:"wildWest"`
 	OOMRisk        bool              `json:"oomRisk"`
 	ThrottlingRisk bool              `json:"throttlingRisk"`

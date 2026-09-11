@@ -4,6 +4,7 @@ import type { PodAnalysisDTO, PodDTO } from '@/types/api'
 import { formatCpu, formatMem } from '@/utils/format'
 import DeltaBars from './DeltaBars.vue'
 import UsageHistoryChart from './UsageHistoryChart.vue'
+import PodManifestView from './PodManifestView.vue'
 
 const props = defineProps<{ pod: PodDTO }>()
 
@@ -82,6 +83,7 @@ function exportForAI() {
       <v-tabs v-model="tab" direction="vertical" density="compact" color="watch">
         <v-tab value="charts" prepend-icon="mdi-chart-bar">Charts</v-tab>
         <v-tab value="analysis" prepend-icon="mdi-magnify-scan">Analysis</v-tab>
+        <v-tab value="details" prepend-icon="mdi-file-document-outline">Details</v-tab>
       </v-tabs>
     </v-col>
 
@@ -93,6 +95,7 @@ function exportForAI() {
             :usage="pod.usageCpu"
             :request="containerAllocation(pod, 'requestsCpu') || undefined"
             :limit="containerAllocation(pod, 'limitsCpu') || undefined"
+            :max-usage="pod.maxUsageCpu"
             :format="formatCpu"
             :danger="pod.throttlingRisk"
           />
@@ -101,6 +104,7 @@ function exportForAI() {
             :usage="pod.usageMem"
             :request="containerAllocation(pod, 'requestsMem') || undefined"
             :limit="containerAllocation(pod, 'limitsMem') || undefined"
+            :max-usage="pod.maxUsageMem"
             :format="formatMem"
             :danger="pod.oomRisk"
           />
@@ -137,6 +141,7 @@ function exportForAI() {
               :samples="analysis.cpuSamples"
               :request-value="analysis.currentRequestCpu"
               :limit-value="analysis.currentLimitCpu"
+              :max-value="analysis.cpuStats.max"
               :format="formatCpu"
             />
             <UsageHistoryChart
@@ -144,6 +149,7 @@ function exportForAI() {
               :samples="analysis.memSamples"
               :request-value="analysis.currentRequestMem"
               :limit-value="analysis.currentLimitMem"
+              :max-value="analysis.memStats.max"
               :format="formatMem"
             />
 
@@ -289,6 +295,10 @@ function exportForAI() {
               Export raw data for AI
             </v-btn>
           </template>
+        </v-window-item>
+
+        <v-window-item value="details">
+          <PodManifestView :pod="pod" />
         </v-window-item>
       </v-window>
     </v-col>

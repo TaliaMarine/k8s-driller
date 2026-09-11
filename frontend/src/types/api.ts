@@ -68,6 +68,8 @@ export interface PodDTO {
   containers: ContainerDTO[]
   usageCpu: number
   usageMem: number
+  maxUsageCpu?: number
+  maxUsageMem?: number
   wildWest: boolean
   oomRisk: boolean
   throttlingRisk: boolean
@@ -123,6 +125,17 @@ export interface PodAnalysisDTO {
   memRecommendation: Recommendation
   wasteful: boolean
   underProvisioned: boolean
+}
+
+export interface ManifestDTO {
+  kind: string
+  name: string
+  yaml: string
+}
+
+export interface PodManifestDTO {
+  pod: ManifestDTO
+  controller?: ManifestDTO
 }
 
 export type Role = 'admin' | 'viewer'

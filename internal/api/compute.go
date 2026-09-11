@@ -37,6 +37,11 @@ func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
 	alloc := pressure.AggregatePod(p.Containers)
 	usageCPU, usageMem, cpuHistory, _ := s.usage.PodUsage(p.Namespace, p.Name)
 
+	var maxUsageCPU, maxUsageMem *int64
+	if maxCPU, maxMem, ok := s.usage.PodMax(p.Namespace, p.Name); ok {
+		maxUsageCPU, maxUsageMem = &maxCPU, &maxMem
+	}
+
 	wildWest := false
 	for _, c := range p.Containers {
 		if pressure.DetectWildWest(c).Any() {
@@ -64,6 +69,8 @@ func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
 		Containers:     toContainerDTOs(p.ContainerNames, p.Containers),
 		UsageCPU:       usageCPU,
 		UsageMem:       usageMem,
+		MaxUsageCPU:    maxUsageCPU,
+		MaxUsageMem:    maxUsageMem,
 		WildWest:       wildWest,
 		OOMRisk:        s.pressure.OOMRisk(usageMem, limitMem),
 		ThrottlingRisk: s.pressure.ThrottlingRisk(cpuHistory, limitCPU),

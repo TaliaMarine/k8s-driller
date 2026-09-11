@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.13.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.12.0...v2.13.0) (2026-09-11)
+
+
+### Features
+
+* switch pod Charts tab to concentric ring gauges, pies to requests share ([4b05c5e](https://github.com/TaliaMarine/k8s-driller/commit/4b05c5e40adb73ba69b19b2277bfb18a0c5c6d86))
+
 ## [2.12.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.11.2...v2.12.0) (2026-09-11)
 
 

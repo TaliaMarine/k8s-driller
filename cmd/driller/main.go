@@ -63,6 +63,12 @@ const recomputeDebounce = 500 * time.Millisecond
 // unbounded range.
 const seedMaxLookback = 30 * 24 * time.Hour
 
+// seedMaxQueryTimeout bounds the background max-seeding queries (see
+// seedUsageMaxFromProm) so a slow or unresponsive Prometheus can't leave the
+// goroutine running indefinitely — it's a best-effort startup enhancement,
+// not something worth waiting on forever for.
+const seedMaxQueryTimeout = 2 * time.Minute
+
 // clientQPS/clientBurst replace client-go's conservative defaults (5 QPS /
 // burst 10), which are sized for a single-purpose client, not a cluster-wide
 // watcher across nodes, pods, deployments, replicasets, statefulsets, and
@@ -189,7 +195,15 @@ func run(log *slog.Logger) error {
 	appmetrics.InformerSynced.Set(1)
 	log.Info("informer caches synced")
 
-	seedUsageMaxFromProm(ctx, log, prom, watchStore, usage)
+	// Backgrounded, not awaited: on a cluster with many pods and a lot of
+	// Prometheus history, the underlying max_over_time subquery can take
+	// well past the liveness probe's failure window (a real deployment hit
+	// ~30s+ here) — running it inline before ListenAndServe meant the
+	// process never got a chance to bind :8080 before the kubelet killed it
+	// for failing /healthz, an unrecoverable crash loop. Seeding is a
+	// best-effort startup enhancement, not something worth the app's
+	// availability.
+	go seedUsageMaxFromProm(ctx, log, prom, watchStore, usage)
 
 	srv.StartAlertWorker(ctx)
 
@@ -265,6 +279,9 @@ func pollMetrics(ctx context.Context, log *slog.Logger, client metricsclient.Cli
 // unseeded — usagecache.Update then bootstraps it from the pod's first
 // live-polled usage instead, once pollMetrics starts.
 func seedUsageMaxFromProm(ctx context.Context, log *slog.Logger, prom *promclient.Client, watch *k8swatch.Store, usage *usagecache.Cache) {
+	ctx, cancel := context.WithTimeout(ctx, seedMaxQueryTimeout)
+	defer cancel()
+
 	cpuMax, err := prom.MaxAllPodsCPU(ctx, seedMaxLookback)
 	if err != nil && !errors.Is(err, promclient.ErrNotConfigured) {
 		log.Warn("seed pod max cpu from prometheus failed", "error", err)

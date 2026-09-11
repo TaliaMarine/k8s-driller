@@ -298,16 +298,59 @@ func seedUsageMaxFromProm(ctx context.Context, log *slog.Logger, prom *promclien
 	if len(cpuMax) == 0 && len(memMax) == 0 {
 		return
 	}
-	seeded := 0
+
+	var pods []k8swatch.PodInfo
 	for _, n := range watch.Nodes() {
-		for _, p := range watch.PodsOnNode(n.Name) {
-			key := p.Namespace + "/" + p.Name
-			if cpuMax[key] == 0 && memMax[key] == 0 {
-				continue
-			}
-			usage.SeedMax(p.Namespace, p.Name, cpuMax[key], memMax[key])
-			seeded++
+		pods = append(pods, watch.PodsOnNode(n.Name)...)
+	}
+
+	// A pod that just restarted (a fresh Deployment/ReplicaSet-generation
+	// name) usually has little Prometheus history of its own yet, even
+	// though its still-alive siblings — same
+	// Deployment/ReplicaSet/StatefulSet/etc — typically do. Every pod in a
+	// group is seeded with the group's own max, not just its own, so a
+	// fresh replica doesn't start from a misleadingly low "max" that
+	// really just means "hasn't lived long."
+	type groupKey struct{ namespace, kind, name string }
+	groupOf := func(p k8swatch.PodInfo) (groupKey, bool) {
+		if p.Controller == nil {
+			return groupKey{}, false
 		}
+		return groupKey{p.Namespace, p.Controller.Kind, p.Controller.Name}, true
+	}
+	groupMaxCPU := make(map[groupKey]int64)
+	groupMaxMem := make(map[groupKey]int64)
+	for _, p := range pods {
+		gk, ok := groupOf(p)
+		if !ok {
+			continue
+		}
+		key := p.Namespace + "/" + p.Name
+		if v := cpuMax[key]; v > groupMaxCPU[gk] {
+			groupMaxCPU[gk] = v
+		}
+		if v := memMax[key]; v > groupMaxMem[gk] {
+			groupMaxMem[gk] = v
+		}
+	}
+
+	seeded := 0
+	for _, p := range pods {
+		key := p.Namespace + "/" + p.Name
+		cpu, mem := cpuMax[key], memMax[key]
+		if gk, ok := groupOf(p); ok {
+			if groupMaxCPU[gk] > cpu {
+				cpu = groupMaxCPU[gk]
+			}
+			if groupMaxMem[gk] > mem {
+				mem = groupMaxMem[gk]
+			}
+		}
+		if cpu == 0 && mem == 0 {
+			continue
+		}
+		usage.SeedMax(p.Namespace, p.Name, cpu, mem)
+		seeded++
 	}
 	log.Info("seeded pod max usage from prometheus", "pods", seeded)
 }

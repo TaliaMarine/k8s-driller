@@ -329,14 +329,20 @@ the two never drift apart). Left-side vertical tabs:
   reads critical-red instead of its usual color when OOM-Risk/Throttling-Risk is set; Max always renders in
   a toned-down red so it reads as a reference, not a live status.
 - **Analysis** — not fetched until an explicit "Analyse" button is clicked, since it drives a Prometheus
-  range query over up to 30 days per pod rather than the always-on live path. Once run, shows: a usage
-  history chart per resource (with dashed request/limit reference lines, plus a dashed red-ish reference
-  line for the series' own observed max); a stats table (avg/median/min/max/p90 against the current
-  request/limit); the derived recommendation with a plain-language rationale (§9.1); Wasteful/Under-
-  provisioned chips; and an "Export raw data for AI" button that downloads the fetched analysis (raw
-  samples, stats, and recommendation) plus the pod's spec and a short description of the app as a JSON
-  file, so a user can feed it to a local AI assistant without that assistant ever touching the cluster
-  itself.
+  range query over up to 30 days per pod rather than the always-on live path. The query pools history across
+  the pod's currently-alive siblings too — every other pod sharing its owning controller
+  (`k8swatch.Store.PodsByController`) — not just the one pod being analyzed: `promclient.PodGroupCPUUsageRange`/
+  `PodGroupMemoryUsageRange` query each sibling as its own series (`sum by (pod)`) and merge them into one
+  timeline by timestamp, picking arbitrarily whichever pod has a sample at a given point rather than summing
+  concurrent usage. A pod that's only lived a short time (a fresh Deployment rollout, a recently-rescheduled
+  pod) usually has little Prometheus history of its own; this gives the Analysis tab a much fuller picture of
+  how the workload actually behaves. Once run, shows: a usage history chart per resource (with dashed
+  request/limit reference lines, plus a dashed red-ish reference line for the series' own observed max); a
+  stats table (avg/median/min/max/p90 against the current request/limit); the derived recommendation with a
+  plain-language rationale (§9.1); Wasteful/Under-provisioned chips; and an "Export raw data for AI" button
+  that downloads the fetched analysis (raw samples, stats, and recommendation) plus the pod's spec and a short
+  description of the app as a JSON file, so a user can feed it to a local AI assistant without that assistant
+  ever touching the cluster itself.
 - **Details** — fetched automatically the first time this tab is shown (a couple of cheap dynamic-client
   `Get`s, not a Prometheus query, so unlike Analysis there's no reason to gate it behind a button). Top
   tabs switch between the pod's own manifest and its owning controller's manifest (Deployment/StatefulSet/
@@ -357,8 +363,12 @@ computation, both places, rather than the frontend re-deriving it from the fetch
 Pod historical max (backing the Max bar/line above): the backend tracks each pod's peak CPU/memory usage
 in-memory for as long as it's been observed (`usagecache.Cache`), updated on every metrics-server poll.
 At startup, before the first poll, it's seeded once from Prometheus's `max_over_time` over the last 30 days
-(one bulk query per resource, not one per pod); pods Prometheus has no data for — or when Prometheus isn't
-configured at all — simply bootstrap their max from their own first live-polled usage instead.
+(one bulk query per resource, not one per pod, keyed by exact pod name). The same sibling-pooling idea as the
+Analysis tab applies here too: every pod is then seeded with the highest max across its whole controller
+group (`cmd/driller/main.go`'s `seedUsageMaxFromProm`), not just its own — a freshly-restarted pod otherwise
+starts from a misleadingly low "max" that really just means "hasn't lived long," when its still-alive
+siblings' history says otherwise. Pods Prometheus has no data for at all — or when Prometheus isn't
+configured — simply bootstrap their max from their own first live-polled usage instead.
 
 ### 7.2 Visual language
 

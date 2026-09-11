@@ -202,12 +202,23 @@ func (s *Server) handlePodAnalysis(w http.ResponseWriter, r *http.Request) {
 	start := end.Add(-time.Duration(days) * 24 * time.Hour)
 	const step = 15 * time.Minute
 
-	cpuSamples, err := s.prom.PodCPUUsageRange(r.Context(), namespace, name, start, end, step)
+	// A pod that hasn't itself been alive long often has little Prometheus
+	// history of its own; pool its currently-alive siblings' history in
+	// too (same Deployment/ReplicaSet/StatefulSet/etc) for a fuller
+	// picture of how this workload actually behaves.
+	podNames := []string{name}
+	for _, sibling := range s.watch.PodsByController(namespace, pod.Controller) {
+		if sibling.Name != name {
+			podNames = append(podNames, sibling.Name)
+		}
+	}
+
+	cpuSamples, err := s.prom.PodGroupCPUUsageRange(r.Context(), namespace, podNames, start, end, step)
 	if err != nil && err != promclient.ErrNotConfigured {
 		http.Error(w, "prometheus query failed", http.StatusBadGateway)
 		return
 	}
-	memSamples, err := s.prom.PodMemoryUsageRange(r.Context(), namespace, name, start, end, step)
+	memSamples, err := s.prom.PodGroupMemoryUsageRange(r.Context(), namespace, podNames, start, end, step)
 	if err != nil && err != promclient.ErrNotConfigured {
 		http.Error(w, "prometheus query failed", http.StatusBadGateway)
 		return

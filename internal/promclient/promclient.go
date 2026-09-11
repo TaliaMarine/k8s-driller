@@ -10,6 +10,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -132,26 +135,78 @@ func (c *Client) vectorByPod(ctx context.Context, query string) (map[string]int6
 	return out, nil
 }
 
-// PodCPUUsageRange returns the pod's combined-container CPU usage series in
-// millicores over [start, end], for the Analysis tab's historical stats and
-// recommendations (SPECS.md §9 recommendation logic, extended with the
-// internal/analysis package).
-func (c *Client) PodCPUUsageRange(ctx context.Context, namespace, pod string, start, end time.Time, step time.Duration) ([]Sample, error) {
+// PodGroupCPUUsageRange returns a merged CPU usage series (millicores) over
+// [start, end] across every name in podNames — the pod being analyzed plus
+// its currently-alive siblings sharing the same Deployment/ReplicaSet/
+// StatefulSet/etc (internal/api's handlePodAnalysis) — for the Analysis
+// tab's historical stats and recommendations (SPECS.md §9, extended with
+// internal/analysis). A pod that's only lived a short time often has
+// little history of its own; pooling siblings' history gives a fuller
+// picture of how this workload actually behaves. Each pod's usage is kept
+// as its own series (`sum by (pod)`, not a plain `sum()`) and then merged
+// by timestamp — see queryRangeMerged — rather than summed together, since
+// the goal is coverage of the timeline, not concurrent combined usage.
+func (c *Client) PodGroupCPUUsageRange(ctx context.Context, namespace string, podNames []string, start, end time.Time, step time.Duration) ([]Sample, error) {
 	query := fmt.Sprintf(
-		`sum(rate(container_cpu_usage_seconds_total{namespace=%q,pod=%q,container!="",container!="POD"}[5m])) * 1000`,
-		namespace, pod,
+		`sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=%q,pod=~%q,container!="",container!="POD"}[5m])) * 1000`,
+		namespace, podNameRegex(podNames),
 	)
-	return c.QueryRange(ctx, query, start, end, step)
+	return c.queryRangeMerged(ctx, query, start, end, step)
 }
 
-// PodMemoryUsageRange returns the pod's combined-container working-set
-// memory usage series in bytes over [start, end].
-func (c *Client) PodMemoryUsageRange(ctx context.Context, namespace, pod string, start, end time.Time, step time.Duration) ([]Sample, error) {
+// PodGroupMemoryUsageRange is PodGroupCPUUsageRange's memory counterpart.
+func (c *Client) PodGroupMemoryUsageRange(ctx context.Context, namespace string, podNames []string, start, end time.Time, step time.Duration) ([]Sample, error) {
 	query := fmt.Sprintf(
-		`sum(container_memory_working_set_bytes{namespace=%q,pod=%q,container!="",container!="POD"})`,
-		namespace, pod,
+		`sum by (pod) (container_memory_working_set_bytes{namespace=%q,pod=~%q,container!="",container!="POD"})`,
+		namespace, podNameRegex(podNames),
 	)
-	return c.QueryRange(ctx, query, start, end, step)
+	return c.queryRangeMerged(ctx, query, start, end, step)
+}
+
+// podNameRegex anchors and alternates a set of pod names into one RE2
+// pattern for a PromQL `=~` matcher. Kubernetes pod names can't actually
+// contain regex metacharacters, but each name is escaped anyway — defense
+// in depth, matching the same posture as internal/api/handlers.go's node
+// name interpolation into PromQL.
+func podNameRegex(names []string) string {
+	escaped := make([]string, len(names))
+	for i, n := range names {
+		escaped[i] = regexp.QuoteMeta(n)
+	}
+	return "^(" + strings.Join(escaped, "|") + ")$"
+}
+
+// queryRangeMerged runs a range query expected to return one series per
+// some grouping label (e.g. one per pod, via `sum by (pod)`) and merges
+// them into a single timeline: at each timestamp, whichever series has a
+// sample there wins (arbitrarily, if more than one does), rather than
+// being summed — the query already ran with one fixed start/end/step, so
+// every returned series shares the exact same aligned timestamps and
+// merging is just picking one value per timestamp.
+func (c *Client) queryRangeMerged(ctx context.Context, query string, start, end time.Time, step time.Duration) ([]Sample, error) {
+	if !c.configured() {
+		return nil, ErrNotConfigured
+	}
+	value, _, err := c.api.QueryRange(ctx, query, promv1.Range{Start: start, End: end, Step: step})
+	if err != nil {
+		return nil, fmt.Errorf("prometheus range query: %w", err)
+	}
+	matrix, ok := value.(model.Matrix)
+	if !ok || len(matrix) == 0 {
+		return nil, nil
+	}
+	byTime := make(map[time.Time]float64)
+	for _, series := range matrix {
+		for _, v := range series.Values {
+			byTime[v.Timestamp.Time()] = float64(v.Value)
+		}
+	}
+	out := make([]Sample, 0, len(byTime))
+	for ts, v := range byTime {
+		out = append(out, Sample{Timestamp: ts, Value: v})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Timestamp.Before(out[j].Timestamp) })
+	return out, nil
 }
 
 // Sample is one point in a historical trend series (SPECS.md §6.1 history

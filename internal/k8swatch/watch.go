@@ -455,3 +455,27 @@ func (s *Store) Pod(namespace, name string) (PodInfo, bool) {
 	p, ok := s.pods[namespace+"/"+name]
 	return p, ok
 }
+
+// PodsByController returns every currently-known pod in namespace sharing
+// controller as its owner (nil returns none) — a pod's siblings from the
+// same Deployment/ReplicaSet/StatefulSet/etc, used to seed a fuller
+// Prometheus history/max for a pod that hasn't itself been alive long
+// (internal/api's handlePodAnalysis and seedUsageMaxFromProm in
+// cmd/driller). Only reflects pods k8swatch currently knows about (live,
+// plus the brief post-deletion tombstone window) — it has no memory of
+// pod names from long-past rollouts.
+func (s *Store) PodsByController(namespace string, controller *ControllerRef) []PodInfo {
+	if controller == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]PodInfo, 0)
+	for _, p := range s.pods {
+		if p.Namespace == namespace && p.Controller != nil &&
+			p.Controller.Kind == controller.Kind && p.Controller.Name == controller.Name {
+			out = append(out, p)
+		}
+	}
+	return out
+}

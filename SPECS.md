@@ -263,9 +263,18 @@ cluster views is shown first; the app title sits centered regardless of which ad
 menu items appear on the right, so it doesn't visually drift depending on role.
 
 1. **Cluster Dashboard** (`/`, "Nodes" tab) — header (cluster name, connection/live indicator, theme
-   toggle), cluster totals bar, responsive grid of Node Cards. Node card size/saturation scales with
-   pressure; dual layered progress bars (allocation layer + live-usage overlay layer); overcommit banner
-   when applicable; a pod count plus how many of those pods currently run over their request.
+   toggle), cluster totals bar, a resource-visualization card, a node name filter, then a responsive grid of
+   Node Cards. Node card size/saturation scales with pressure; dual layered progress bars (allocation layer +
+   live-usage overlay layer); overcommit banner when applicable; a pod count plus how many of those pods
+   currently run over their request.
+
+   The resource-visualization card mirrors the one above the pod lists on the Node Drilldown/Workloads views
+   (§7.1 items 2–3), but one cell per *node* instead of per pod/workload: "By Node" (treemap), "Bars"
+   (stacked distribution bars), and "Distribution" — one hexagon per node, colored by the node's own Health
+   classification (the same severity mapping as the card's chip/border) rather than a usage-ratio gradient,
+   since a node's Health already is the verdict. Clicking a node cell in any of the three filters the Node
+   Card grid below via the name filter field, exactly like clicking a workload cell filters the pod list on
+   the other views.
 2. **Node Drilldown** (`/nodes/:name`) — entered via card click with a shared-element/morph transition
    (not a hard route reload) so the node card visually expands into the detail header. Two sections:
    - "Wild West" list — pods missing request/limit, chips per missing dimension.

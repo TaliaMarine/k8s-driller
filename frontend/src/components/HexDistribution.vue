@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import type { PodDTO } from '@/types/api'
 import { containerAllocation } from '@/composables/usePodFilters'
+import HexGrid from './HexGrid.vue'
+import type { HexCell } from './HexGrid.vue'
 
 // A honeycomb of one hexagon per pod (à la Datadog's host map), colored by
 // how close usage sits to that pod's own ceiling — the same three-band
@@ -16,13 +18,6 @@ const props = defineProps<{
   format: (v: number) => string
 }>()
 const emit = defineEmits<{ select: [name: string] }>()
-
-interface HexCell {
-  key: string
-  name: string
-  color: string
-  tooltip: string
-}
 
 // Mirrors MiniRatioBar's denom/effectiveRequests logic (limit, or 2x
 // requests when there's no limit; requests, or half the limit when there's
@@ -68,12 +63,12 @@ const cells = computed<HexCell[]>(() =>
     const key = `${p.namespace}/${p.name}`
 
     if (p.deleted) {
-      return { key, name: p.name, color: DELETED_COLOR, tooltip: `${p.name}: deleted` }
+      return { key, value: p.name, color: DELETED_COLOR, tooltip: `${p.name}: deleted` }
     }
     if (!p.ready) {
       return {
         key,
-        name: p.name,
+        value: p.name,
         color: NOT_READY_COLOR,
         tooltip: `${p.name}: not ready (${props.format(usage)})`,
       }
@@ -90,72 +85,14 @@ const cells = computed<HexCell[]>(() =>
       ratio != null && denomLabel
         ? `${p.name}: ${props.format(usage)} (${(ratio * 100).toFixed(0)}% of ${denomLabel})`
         : `${p.name}: ${props.format(usage)} — no request or limit configured`
-    return { key, name: p.name, color, tooltip }
+    return { key, value: p.name, color, tooltip }
   }),
 )
-
-// A roughly 2.5:1 landscape grid, like the reference host map, regardless
-// of how many pods there are.
-const columns = computed(() =>
-  Math.max(4, Math.min(32, Math.round(Math.sqrt(cells.value.length * 2.5)))),
-)
-const rows = computed(() => {
-  const out: HexCell[][] = []
-  for (let i = 0; i < cells.value.length; i += columns.value) {
-    out.push(cells.value.slice(i, i + columns.value))
-  }
-  return out
-})
 </script>
 
 <template>
   <div class="hex-distribution mb-4">
     <div class="text-caption text-medium-emphasis mb-1">{{ label }} · {{ pods.length }} pods</div>
-    <div v-if="cells.length === 0" class="text-caption text-medium-emphasis">No pods.</div>
-    <div v-else class="hex-grid">
-      <div
-        v-for="(row, ri) in rows"
-        :key="ri"
-        class="hex-row"
-        :class="{ 'hex-row-offset': ri % 2 === 1 }"
-      >
-        <div
-          v-for="cell in row"
-          :key="cell.key"
-          class="hex-cell"
-          :style="{ background: cell.color }"
-          :title="cell.tooltip"
-          @click="emit('select', cell.name)"
-        />
-      </div>
-    </div>
+    <HexGrid :cells="cells" @select="emit('select', $event)" />
   </div>
 </template>
-
-<style scoped>
-.hex-grid {
-  display: flex;
-  flex-direction: column;
-}
-.hex-row {
-  display: flex;
-  gap: 3px;
-}
-.hex-row:not(:first-child) {
-  margin-top: -7px;
-}
-.hex-row-offset {
-  margin-left: 14px;
-}
-.hex-cell {
-  width: 24px;
-  height: 28px;
-  flex-shrink: 0;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.hex-cell:hover {
-  opacity: 0.75;
-}
-</style>

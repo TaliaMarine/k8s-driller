@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.15.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.15.0...v2.15.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* restrict sibling-pooling to Deployment/StatefulSet/DaemonSet ([b72df3b](https://github.com/TaliaMarine/k8s-driller/commit/b72df3bf0f9ade09b748d7095f161c0b8ed06f2c))
+
 ## [2.15.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.14.2...v2.15.0) (2026-09-11)
 
 

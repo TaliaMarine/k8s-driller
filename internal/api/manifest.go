@@ -83,17 +83,47 @@ func (s *Server) handlePodManifest(w http.ResponseWriter, r *http.Request) {
 	resp := PodManifestDTO{Pod: ManifestDTO{Kind: "Pod", Name: name, YAML: podYAML}}
 
 	if pod.Controller != nil {
-		if gvr, ok := controllerGVRs[pod.Controller.Kind]; ok {
-			controllerYAML, err := s.fetchManifestYAML(r.Context(), gvr, namespace, pod.Controller.Name)
+		controllerKind, controllerName := pod.Controller.Kind, pod.Controller.Name
+		// k8swatch.resolveController already resolves a ReplicaSet-owned
+		// pod to its Deployment via its in-memory rsOwner cache, but that
+		// cache is timing-dependent (populated by a separate informer) and
+		// falls back to the bare ReplicaSet if it hasn't caught up yet.
+		// The Details tab always wants the Deployment, so — since this
+		// handler already does live dynamic-client Gets — take one more
+		// live hop here instead of trusting the cache for this specific
+		// case.
+		if controllerKind == "ReplicaSet" {
+			if kind, name, ok := s.resolveReplicaSetOwner(r.Context(), namespace, controllerName); ok {
+				controllerKind, controllerName = kind, name
+			}
+		}
+		if gvr, ok := controllerGVRs[controllerKind]; ok {
+			controllerYAML, err := s.fetchManifestYAML(r.Context(), gvr, namespace, controllerName)
 			switch {
 			case err == nil:
-				resp.Controller = &ManifestDTO{Kind: pod.Controller.Kind, Name: pod.Controller.Name, YAML: controllerYAML}
+				resp.Controller = &ManifestDTO{Kind: controllerKind, Name: controllerName, YAML: controllerYAML}
 			case !apierrors.IsNotFound(err):
 				s.log.Warn("fetch controller manifest failed",
-					"kind", pod.Controller.Kind, "name", pod.Controller.Name, "error", err)
+					"kind", controllerKind, "name", controllerName, "error", err)
 			}
 		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// resolveReplicaSetOwner fetches replicaSetName live and returns its own
+// owning Deployment, if it has one — see handlePodManifest's ReplicaSet
+// case above.
+func (s *Server) resolveReplicaSetOwner(ctx context.Context, namespace, replicaSetName string) (kind, name string, ok bool) {
+	obj, err := s.dynamic.Resource(controllerGVRs["ReplicaSet"]).Namespace(namespace).Get(ctx, replicaSetName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", false
+	}
+	for _, owner := range obj.GetOwnerReferences() {
+		if owner.Kind == "Deployment" {
+			return "Deployment", owner.Name, true
+		}
+	}
+	return "", "", false
 }

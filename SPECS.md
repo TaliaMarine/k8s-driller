@@ -330,8 +330,10 @@ the two never drift apart). Left-side vertical tabs:
   a toned-down red so it reads as a reference, not a live status.
 - **Analysis** — not fetched until an explicit "Analyse" button is clicked, since it drives a Prometheus
   range query over up to 30 days per pod rather than the always-on live path. The query pools history across
-  the pod's currently-alive siblings too — every other pod sharing its owning controller
-  (`k8swatch.Store.PodsByController`) — not just the one pod being analyzed: `promclient.PodGroupCPUUsageRange`/
+  the pod's currently-alive siblings too — every other pod sharing its owning Deployment/StatefulSet/DaemonSet
+  (`k8swatch.Store.PodsByController`, `continuityControllerKinds` — deliberately not ReplicaSet, whose pods
+  are only one single, ephemeral rollout generation, or Job/CronJob, a finite run rather than a continuously
+  running workload) — not just the one pod being analyzed: `promclient.PodGroupCPUUsageRange`/
   `PodGroupMemoryUsageRange` query each sibling as its own series (`sum by (pod)`) and merge them into one
   timeline by timestamp, picking arbitrarily whichever pod has a sample at a given point rather than summing
   concurrent usage. A pod that's only lived a short time (a fresh Deployment rollout, a recently-rescheduled
@@ -345,14 +347,18 @@ the two never drift apart). Left-side vertical tabs:
   ever touching the cluster itself.
 - **Details** — fetched automatically the first time this tab is shown (a couple of cheap dynamic-client
   `Get`s, not a Prometheus query, so unlike Analysis there's no reason to gate it behind a button). Top
-  tabs switch between the pod's own manifest and its owning controller's manifest (Deployment/StatefulSet/
-  DaemonSet/ReplicaSet/Job/CronJob — whichever `k8swatch.ControllerRef.Kind` resolved to), each rendered as
-  a collapsible, syntax-highlighted YAML tree (expanded one level deep by default). Alongside — beside on
-  wide viewports, stacked below on narrow ones — an info panel always reflects the pod itself regardless of
-  which manifest tab is active: team chip(s) (see below) on top, then age, phase, QoS class, node, each
-  container's configured requests/limits, per-container restart counts, termination/crash detail (OOMKilled
-  reason, exit code, `CrashLoopBackOff`-style waiting reasons) when present, and pod conditions. Any field
-  absent from the manifest is omitted rather than shown empty.
+  tabs switch between the pod's own manifest and its owning controller's manifest — Deployment/StatefulSet/
+  DaemonSet/Job/CronJob directly, or a ReplicaSet resolved one hop further to its owning Deployment
+  (`handlePodManifest`'s `resolveReplicaSetOwner`, a live `Get` rather than trusting
+  `k8swatch.ControllerRef`'s in-memory (and timing-dependent) resolution — the Details tab always wants the
+  Deployment, never a bare ReplicaSet) — each rendered as a collapsible, syntax-highlighted YAML tree
+  (expanded one level deep by default). Alongside — beside on wide viewports, stacked below on narrow ones —
+  an info panel always reflects the pod itself regardless of which manifest tab is active: team chip(s) (see
+  below) on top, then age, how long it's actually been running (from `status.startTime`, distinct from
+  age's `metadata.creationTimestamp` — the gap between the two is scheduling/image-pull delay), phase, QoS
+  class, node, each container's configured requests/limits, per-container restart counts, termination/crash
+  detail (OOMKilled reason, exit code, `CrashLoopBackOff`-style waiting reasons) when present, and pod
+  conditions. Any field absent from the manifest is omitted rather than shown empty.
 
 Team attribution: `PodDTO.teams` (backend `extractTeams`, `internal/api/dto.go`) collects the distinct values
 of every pod label whose key contains "team" (case-insensitive — covers plain `team` as well as prefixed

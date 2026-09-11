@@ -50,6 +50,10 @@ const status = computed(() => obj(props.podData?.status))
 const creationDate = computed(() => date(metadata.value.creationTimestamp))
 const age = computed(() => (creationDate.value ? formatAge(creationDate.value) : undefined))
 const startDate = computed(() => date(status.value.startTime))
+// Distinct from Age: startTime is when the pod actually started running
+// (after scheduling/image pulls), not when the object was created — the
+// gap between the two is exactly the scheduling/pull delay.
+const runningFor = computed(() => (startDate.value ? formatAge(startDate.value) : undefined))
 
 interface ContainerSpec {
   name: string
@@ -83,6 +87,7 @@ const overview = computed(() => {
   if (str(status.value.qosClass))
     rows.push({ label: 'QoS class', value: str(status.value.qosClass)! })
   if (str(spec.value.nodeName)) rows.push({ label: 'Node', value: str(spec.value.nodeName)! })
+  if (runningFor.value) rows.push({ label: 'Running for', value: runningFor.value })
   if (startDate.value) rows.push({ label: 'Started', value: startDate.value.toLocaleString() })
   return rows
 })

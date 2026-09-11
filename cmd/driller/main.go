@@ -307,13 +307,16 @@ func seedUsageMaxFromProm(ctx context.Context, log *slog.Logger, prom *promclien
 	// A pod that just restarted (a fresh Deployment/ReplicaSet-generation
 	// name) usually has little Prometheus history of its own yet, even
 	// though its still-alive siblings — same
-	// Deployment/ReplicaSet/StatefulSet/etc — typically do. Every pod in a
-	// group is seeded with the group's own max, not just its own, so a
-	// fresh replica doesn't start from a misleadingly low "max" that
-	// really just means "hasn't lived long."
+	// Deployment/StatefulSet/DaemonSet — typically do (deliberately not
+	// ReplicaSet, whose pods are only one single, ephemeral rollout
+	// generation, or Job/CronJob, a finite run — see
+	// k8swatch.HasContinuity). Every pod in a group is seeded with the
+	// group's own max, not just its own, so a fresh replica doesn't start
+	// from a misleadingly low "max" that really just means "hasn't lived
+	// long."
 	type groupKey struct{ namespace, kind, name string }
 	groupOf := func(p k8swatch.PodInfo) (groupKey, bool) {
-		if p.Controller == nil {
+		if p.Controller == nil || !k8swatch.HasContinuity(p.Controller.Kind) {
 			return groupKey{}, false
 		}
 		return groupKey{p.Namespace, p.Controller.Kind, p.Controller.Name}, true

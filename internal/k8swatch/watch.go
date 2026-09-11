@@ -456,16 +456,40 @@ func (s *Store) Pod(namespace, name string) (PodInfo, bool) {
 	return p, ok
 }
 
+// continuityControllerKinds are the controller kinds whose pods persist as
+// "the same workload" across restarts/rollouts — Deployment, StatefulSet,
+// DaemonSet — as opposed to a ReplicaSet (one single, ephemeral rollout
+// generation — a fresh Deployment rollout gets a brand new ReplicaSet, so
+// grouping by it wouldn't actually pool history across rollouts) or a
+// Job/CronJob (a finite, one-shot/scheduled run rather than a continuously
+// running workload). PodsByController only treats pods as siblings within
+// this set.
+var continuityControllerKinds = map[string]bool{
+	"Deployment":  true,
+	"StatefulSet": true,
+	"DaemonSet":   true,
+}
+
+// HasContinuity reports whether kind is one of continuityControllerKinds —
+// exported so callers outside this package that need to group pods by
+// controller themselves (cmd/driller's seedUsageMaxFromProm) apply the
+// exact same restriction as PodsByController, rather than maintaining a
+// second copy of this list that could drift from it.
+func HasContinuity(kind string) bool {
+	return continuityControllerKinds[kind]
+}
+
 // PodsByController returns every currently-known pod in namespace sharing
-// controller as its owner (nil returns none) — a pod's siblings from the
-// same Deployment/ReplicaSet/StatefulSet/etc, used to seed a fuller
-// Prometheus history/max for a pod that hasn't itself been alive long
-// (internal/api's handlePodAnalysis and seedUsageMaxFromProm in
-// cmd/driller). Only reflects pods k8swatch currently knows about (live,
-// plus the brief post-deletion tombstone window) — it has no memory of
-// pod names from long-past rollouts.
+// controller as its owner — a pod's siblings from the same Deployment/
+// StatefulSet/DaemonSet, used to seed a fuller Prometheus history/max for a
+// pod that hasn't itself been alive long (internal/api's handlePodAnalysis
+// and seedUsageMaxFromProm in cmd/driller). Returns none for a nil
+// controller or one outside continuityControllerKinds. Only reflects pods
+// k8swatch currently knows about (live, plus the brief post-deletion
+// tombstone window) — it has no memory of pod names from long-past
+// rollouts.
 func (s *Store) PodsByController(namespace string, controller *ControllerRef) []PodInfo {
-	if controller == nil {
+	if controller == nil || !continuityControllerKinds[controller.Kind] {
 		return nil
 	}
 	s.mu.RLock()

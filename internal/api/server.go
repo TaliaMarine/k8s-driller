@@ -134,7 +134,9 @@ func (s *Server) Routes() *http.ServeMux {
 
 	mux.HandleFunc("GET /api/v1/stream/cluster", s.sessions.RequireAuth(s.handleStreamCluster))
 	mux.HandleFunc("GET /api/v1/stream/nodes/{name}", s.sessions.RequireAuth(s.handleStreamNode))
+	mux.HandleFunc("GET /api/v1/stream/nodes/{name}/distribution", s.sessions.RequireAuth(s.handleStreamNodeDistribution))
 	mux.HandleFunc("GET /api/v1/stream/workloads", s.sessions.RequireAuth(s.handleStreamWorkloads))
+	mux.HandleFunc("GET /api/v1/stream/workloads/distribution", s.sessions.RequireAuth(s.handleStreamWorkloadsDistribution))
 	mux.HandleFunc("GET /api/v1/stream/alerts", s.sessions.RequireAuth(s.handleStreamAlerts))
 
 	mux.HandleFunc("GET /api/v1/admin/users", s.sessions.RequireRole(v1alpha1.RoleAdmin, s.handleListUsers))

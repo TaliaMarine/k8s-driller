@@ -27,6 +27,15 @@ const { status, data: allPods } = useEventSource<PodDTO[]>('/api/v1/stream/workl
 // every count/group/aggregate downstream is already namespace-local.
 const nsPods = computed(() => (allPods.value ?? []).filter((p) => p.namespace === props.name))
 
+// A dedicated feed, not nsPods: the Distribution honeycomb is the one view
+// that wants not-Ready and recently-deleted pods too (grayed, see
+// HexDistribution.vue), which the main pod-list stream above deliberately
+// excludes everywhere else (SPECS.md §7.1). The cluster-wide feed is
+// already sorted oldest-first on the backend, and filtering it down to one
+// namespace preserves that relative order.
+const { data: distPods } = useEventSource<PodDTO[]>('/api/v1/stream/workloads/distribution')
+const nsDistPods = computed(() => (distPods.value ?? []).filter((p) => p.namespace === props.name))
+
 const { search, activeFilters, filteredPods, groups, clearFilters, filtersActive } =
   usePodFilters(nsPods)
 
@@ -176,14 +185,14 @@ function selectPod(name: string) {
             <v-card-text>
               <HexDistribution
                 label="CPU"
-                :pods="nsPods"
+                :pods="nsDistPods"
                 resource="cpu"
                 :format="formatCpu"
                 @select="selectPod"
               />
               <HexDistribution
                 label="Memory"
-                :pods="nsPods"
+                :pods="nsDistPods"
                 resource="mem"
                 :format="formatMem"
                 @select="selectPod"

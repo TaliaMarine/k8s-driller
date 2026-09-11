@@ -32,10 +32,19 @@ type ControllerRef struct {
 // PodInfo is everything the pressure engine and API layer need about one
 // pod's spec (not its live usage).
 type PodInfo struct {
-	Namespace      string
-	Name           string
-	NodeName       string
-	Phase          string
+	Namespace         string
+	Name              string
+	NodeName          string
+	Phase             string
+	Ready             bool // pod's own Ready condition — distinct from Phase (e.g. Running but failing readiness)
+	CreationTimestamp time.Time
+	// DeletedAt is nil while the pod still exists in the cluster. Once the
+	// informer sees it deleted, deletePod sets this instead of dropping the
+	// entry immediately, so the Distribution view's honeycomb can keep
+	// showing it — darker gray — for a short grace period (see
+	// Store.PruneDeleted) instead of it vanishing without a trace the
+	// moment it's gone.
+	DeletedAt      *time.Time
 	Controller     *ControllerRef // nil for a bare pod with no owning controller
 	ContainerNames []string
 	Containers     []pressure.ContainerResources // same order as ContainerNames
@@ -279,6 +288,15 @@ func quantityPtr(list corev1.ResourceList, name corev1.ResourceName, milli bool)
 	return &v
 }
 
+func podReady(pod *corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Store) upsertPod(obj interface{}) {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
@@ -286,20 +304,26 @@ func (s *Store) upsertPod(obj interface{}) {
 	}
 	names, resources := toContainerResources(pod.Spec.Containers)
 	info := PodInfo{
-		Namespace:      pod.Namespace,
-		Name:           pod.Name,
-		NodeName:       pod.Spec.NodeName,
-		Phase:          string(pod.Status.Phase),
-		Controller:     s.resolveController(pod),
-		ContainerNames: names,
-		Containers:     resources,
-		Labels:         pod.Labels,
+		Namespace:         pod.Namespace,
+		Name:              pod.Name,
+		NodeName:          pod.Spec.NodeName,
+		Phase:             string(pod.Status.Phase),
+		Ready:             podReady(pod),
+		CreationTimestamp: pod.CreationTimestamp.Time,
+		Controller:        s.resolveController(pod),
+		ContainerNames:    names,
+		Containers:        resources,
+		Labels:            pod.Labels,
 	}
 	s.mu.Lock()
 	s.pods[pod.Namespace+"/"+pod.Name] = info
 	s.mu.Unlock()
 }
 
+// deletePod marks the pod deleted rather than removing it outright — see
+// PodInfo.DeletedAt — so it stays visible (as a "just terminated" tombstone)
+// on the Distribution view for a short grace period. Store.PruneDeleted is
+// what actually removes it once that period elapses.
 func (s *Store) deletePod(obj interface{}) {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
@@ -310,9 +334,30 @@ func (s *Store) deletePod(obj interface{}) {
 			return
 		}
 	}
+	key := pod.Namespace + "/" + pod.Name
 	s.mu.Lock()
-	delete(s.pods, pod.Namespace+"/"+pod.Name)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	info, found := s.pods[key]
+	if !found {
+		return
+	}
+	now := time.Now()
+	info.DeletedAt = &now
+	s.pods[key] = info
+}
+
+// PruneDeleted removes tombstoned pods (see deletePod) whose grace period
+// has elapsed, so pods deleted from the cluster don't linger in memory
+// forever just because the Distribution view briefly shows them.
+func (s *Store) PruneDeleted(retention time.Duration) {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, info := range s.pods {
+		if info.DeletedAt != nil && now.Sub(*info.DeletedAt) > retention {
+			delete(s.pods, key)
+		}
+	}
 }
 
 // Node returns one node by name, or false if not found.

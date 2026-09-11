@@ -246,7 +246,9 @@ All endpoints under `/api/v1`, JSON, session-cookie authenticated (except `/heal
 |---|---|---|
 | `/api/v1/stream/cluster` | Cluster + all-nodes summary | Full snapshot on connect, then incremental patches |
 | `/api/v1/stream/nodes/{name}` | One node's pods/pressure | Snapshot + patches, used by the drilldown view |
+| `/api/v1/stream/nodes/{name}/distribution` | One node's pods, including not-Ready and recently-deleted ones | Feeds the Distribution honeycomb only (§7.1) — every other view/count uses the topic above instead |
 | `/api/v1/stream/workloads` | All pods across every node | Snapshot + patches, used by the cluster-wide Workloads view |
+| `/api/v1/stream/workloads/distribution` | All pods across every node, including not-Ready and recently-deleted ones | Cluster-wide counterpart to the node-scoped distribution topic; the Namespace Drilldown's honeycomb filters this client-side |
 | `/api/v1/stream/alerts` | Fired alerts (for an in-app toast/notification feed) | Event per alert fired |
 
 Event format: standard SSE `event:` + `data:` (JSON), with `event: snapshot` on connect and
@@ -280,6 +282,19 @@ menu items appear on the right, so it doesn't visually drift depending on role.
    every pod's requests summed cluster-wide. Each row additionally has a right-aligned button to jump to the
    node it's scheduled on. The Namespace Drilldown (linked from a Namespaces list, not detailed separately
    here) reuses the same row, scoping its pie to that namespace's own total requests instead.
+
+Above the filterable pod list, both the Node Drilldown and Workloads views (and the Namespace Drilldown)
+share a resource-visualization card with three tabs: "By workload" (treemap), "Bars" (stacked distribution
+bars), and "Distribution" — a honeycomb with one hexagon per pod, oldest-created first, colored by how close
+usage sits to that pod's own request/limit ceiling using the same healthy/warning/critical severity scale as
+elsewhere. Unlike the other two tabs (and every pod count/pressure total in the app), Distribution
+deliberately also shows pods the rest of the app excludes: a pod whose own Ready condition is false renders
+gray, and a pod deleted from the cluster keeps rendering — darker gray — for a 60-second grace period after
+deletion (`k8swatch.Store.PruneDeleted`) before disappearing, so a just-terminated pod doesn't vanish without
+a trace. This is why Distribution is fed by its own dedicated SSE topic (§6.2) rather than the same stream
+the pod list/treemap/bars use — those must keep excluding not-Ready/deleted pods from every count and total,
+so the two paths diverge at the source instead of filtering client-side. Clicking a hexagon filters the pod
+list below to that pod, same as clicking a workload cell in the other two tabs.
 4. **Role Management** (`/admin/users`, admin-only) — table of OIDC users with role dropdown; the
    first-ever admin promotion flow (using the bootstrap token) is a distinct, clearly-labeled one-time
    screen, not mixed into routine role editing.

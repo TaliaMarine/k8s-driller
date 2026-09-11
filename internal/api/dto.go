@@ -3,6 +3,7 @@ package api
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/TaliaMarine/k8s-driller/internal/k8swatch"
 	"github.com/TaliaMarine/k8s-driller/internal/pressure"
@@ -45,20 +46,28 @@ type ControllerRefDTO struct {
 // PodDTO is one pod's full picture: spec, live usage, and computed pressure
 // states (SPECS.md §2.3).
 type PodDTO struct {
-	Namespace      string            `json:"namespace"`
-	Name           string            `json:"name"`
-	NodeName       string            `json:"nodeName"`
-	Phase          string            `json:"phase"`
-	Controller     *ControllerRefDTO `json:"controller,omitempty"`
-	Containers     []ContainerDTO    `json:"containers"`
-	UsageCPU       int64             `json:"usageCpu"`
-	UsageMem       int64             `json:"usageMem"`
-	MaxUsageCPU    *int64            `json:"maxUsageCpu,omitempty"`
-	MaxUsageMem    *int64            `json:"maxUsageMem,omitempty"`
-	Teams          []string          `json:"teams,omitempty"`
-	WildWest       bool              `json:"wildWest"`
-	OOMRisk        bool              `json:"oomRisk"`
-	ThrottlingRisk bool              `json:"throttlingRisk"`
+	Namespace   string            `json:"namespace"`
+	Name        string            `json:"name"`
+	NodeName    string            `json:"nodeName"`
+	Phase       string            `json:"phase"`
+	Controller  *ControllerRefDTO `json:"controller,omitempty"`
+	Containers  []ContainerDTO    `json:"containers"`
+	UsageCPU    int64             `json:"usageCpu"`
+	UsageMem    int64             `json:"usageMem"`
+	MaxUsageCPU *int64            `json:"maxUsageCpu,omitempty"`
+	MaxUsageMem *int64            `json:"maxUsageMem,omitempty"`
+	Teams       []string          `json:"teams,omitempty"`
+	// Ready/Deleted/CreationTime back the Distribution view's honeycomb
+	// (SPECS.md §7.1): not-Ready pods render gray, recently-deleted ones
+	// (Deleted, see k8swatch.Store.PruneDeleted) render darker gray, and
+	// CreationTime orders the grid oldest-first. Always populated (not
+	// omitempty) since every real pod has all three.
+	Ready          bool      `json:"ready"`
+	Deleted        bool      `json:"deleted"`
+	CreationTime   time.Time `json:"creationTime"`
+	WildWest       bool      `json:"wildWest"`
+	OOMRisk        bool      `json:"oomRisk"`
+	ThrottlingRisk bool      `json:"throttlingRisk"`
 }
 
 // NodeDTO is one node card's worth of data (SPECS.md §2.1/§7.1).

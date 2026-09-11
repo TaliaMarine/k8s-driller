@@ -21,9 +21,11 @@ func (s *Server) Recompute(reason string) {
 	for _, n := range summary.Nodes {
 		dtos := s.buildNodePodDTOs(n.Name)
 		s.hub.PublishSnapshot("node:"+n.Name, dtos)
+		s.hub.PublishSnapshot("node-distribution:"+n.Name, s.buildNodePodDistributionDTOs(n.Name))
 		allPods = append(allPods, dtos...)
 	}
 	s.hub.PublishSnapshot("workloads", allPods)
+	s.hub.PublishSnapshot("workloads-distribution", s.buildAllPodDistributionDTOs())
 
 	// Non-blocking: StartAlertWorker's single goroutine serializes actual
 	// evaluation, so a burst of recomputes here can queue at most one

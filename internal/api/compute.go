@@ -23,14 +23,33 @@ func isTerminalPhase(phase string) bool {
 // still lingering until garbage collection — it holds no resource
 // reservation and including it would double-count nothing but noise into
 // every node's allocation totals, PodCount, and the drilldown pod list.
+// Tombstoned pods (DeletedAt set, see k8swatch.Store.deletePod) are
+// excluded here too, for the same reason — the Distribution view's
+// dedicated builders below are the one deliberate exception that wants
+// them.
 func activePods(pods []k8swatch.PodInfo) []k8swatch.PodInfo {
 	out := make([]k8swatch.PodInfo, 0, len(pods))
 	for _, p := range pods {
-		if !isTerminalPhase(p.Phase) {
+		if !isTerminalPhase(p.Phase) && p.DeletedAt == nil {
 			out = append(out, p)
 		}
 	}
 	return out
+}
+
+// sortPodsByCreation orders oldest-first, for the Distribution honeycomb
+// (SPECS.md §7.1: pods laid out in the order they were created).
+func sortPodsByCreation(pods []k8swatch.PodInfo) {
+	sort.Slice(pods, func(i, j int) bool {
+		ti, tj := pods[i].CreationTimestamp, pods[j].CreationTimestamp
+		if !ti.Equal(tj) {
+			return ti.Before(tj)
+		}
+		if pods[i].Namespace != pods[j].Namespace {
+			return pods[i].Namespace < pods[j].Namespace
+		}
+		return pods[i].Name < pods[j].Name
+	})
 }
 
 func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
@@ -72,6 +91,9 @@ func (s *Server) buildPodDTO(p k8swatch.PodInfo) PodDTO {
 		MaxUsageCPU:    maxUsageCPU,
 		MaxUsageMem:    maxUsageMem,
 		Teams:          extractTeams(p.Labels),
+		Ready:          p.Ready,
+		Deleted:        p.DeletedAt != nil,
+		CreationTime:   p.CreationTimestamp,
 		WildWest:       wildWest,
 		OOMRisk:        s.pressure.OOMRisk(usageMem, limitMem),
 		ThrottlingRisk: s.pressure.ThrottlingRisk(cpuHistory, limitCPU),
@@ -160,6 +182,40 @@ func (s *Server) buildAllPodDTOs() []PodDTO {
 		out = append(out, s.buildNodePodDTOs(n.Name)...)
 	}
 	return out
+}
+
+// buildNodePodDistributionDTOs returns every pod k8swatch still knows about
+// for this node — including ones that aren't Ready and ones recently
+// deleted (see k8swatch.Store.PruneDeleted) — sorted oldest-first by
+// creation time. This deliberately sees more than buildNodePodDTOs: the
+// Distribution honeycomb (SPECS.md §7.1) is the one view that wants to show
+// not-Ready pods (gray) and recently-terminated ones (darker gray) instead
+// of silently excluding them like every pressure/allocation total and pod
+// list elsewhere in the app does.
+func (s *Server) buildNodePodDistributionDTOs(nodeName string) []PodDTO {
+	pods := s.watch.PodsOnNode(nodeName)
+	sortPodsByCreation(pods)
+	dtos := make([]PodDTO, 0, len(pods))
+	for _, p := range pods {
+		dtos = append(dtos, s.buildPodDTO(p))
+	}
+	return dtos
+}
+
+// buildAllPodDistributionDTOs is the cluster-wide counterpart to
+// buildNodePodDistributionDTOs, sorted oldest-first across every node (not
+// per-node-then-concatenated, which would only be locally sorted).
+func (s *Server) buildAllPodDistributionDTOs() []PodDTO {
+	var pods []k8swatch.PodInfo
+	for _, n := range s.watch.Nodes() {
+		pods = append(pods, s.watch.PodsOnNode(n.Name)...)
+	}
+	sortPodsByCreation(pods)
+	dtos := make([]PodDTO, 0, len(pods))
+	for _, p := range pods {
+		dtos = append(dtos, s.buildPodDTO(p))
+	}
+	return dtos
 }
 
 func (s *Server) buildClusterSummary() ClusterSummaryDTO {

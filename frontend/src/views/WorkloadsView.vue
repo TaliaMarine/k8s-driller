@@ -24,6 +24,12 @@ const clusterStore = useClusterStore()
 
 const { status, data: pods } = useEventSource<PodDTO[]>('/api/v1/stream/workloads')
 
+// A dedicated feed, not scopedPods: the Distribution honeycomb is the one
+// view that wants not-Ready and recently-deleted pods too (grayed, see
+// HexDistribution.vue), which the main pod-list stream above deliberately
+// excludes everywhere else (SPECS.md §7.1).
+const { data: distPods } = useEventSource<PodDTO[]>('/api/v1/stream/workloads/distribution')
+
 const {
   search,
   namespaceFilter,
@@ -193,14 +199,14 @@ function selectPod(name: string) {
             <v-card-text>
               <HexDistribution
                 label="CPU"
-                :pods="scopedPods"
+                :pods="distPods ?? []"
                 resource="cpu"
                 :format="formatCpu"
                 @select="selectPod"
               />
               <HexDistribution
                 label="Memory"
-                :pods="scopedPods"
+                :pods="distPods ?? []"
                 resource="mem"
                 :format="formatMem"
                 @select="selectPod"

@@ -53,9 +53,32 @@ function hexFill(
   return { color: `rgba(var(--v-theme-healthy), ${(0.25 + t * 0.3).toFixed(2)})`, ratio }
 }
 
+// Not-Ready and recently-deleted pods (see PodDTO.deleted — a short
+// tombstone grace period on the backend, k8swatch.Store.PruneDeleted)
+// override the usage-based severity color entirely: a plain gray scale
+// (deleted darker than not-ready) rather than any hue, so they read as "not
+// currently a live workload" at a glance regardless of what their last
+// known usage/requests/limits were.
+const NOT_READY_COLOR = 'rgba(var(--v-theme-on-surface), 0.25)'
+const DELETED_COLOR = 'rgba(var(--v-theme-on-surface), 0.55)'
+
 const cells = computed<HexCell[]>(() =>
   props.pods.map((p) => {
     const usage = props.resource === 'cpu' ? p.usageCpu : p.usageMem
+    const key = `${p.namespace}/${p.name}`
+
+    if (p.deleted) {
+      return { key, name: p.name, color: DELETED_COLOR, tooltip: `${p.name}: deleted` }
+    }
+    if (!p.ready) {
+      return {
+        key,
+        name: p.name,
+        color: NOT_READY_COLOR,
+        tooltip: `${p.name}: not ready (${props.format(usage)})`,
+      }
+    }
+
     const requests = containerAllocation(
       p,
       props.resource === 'cpu' ? 'requestsCpu' : 'requestsMem',
@@ -67,7 +90,7 @@ const cells = computed<HexCell[]>(() =>
       ratio != null && denomLabel
         ? `${p.name}: ${props.format(usage)} (${(ratio * 100).toFixed(0)}% of ${denomLabel})`
         : `${p.name}: ${props.format(usage)} — no request or limit configured`
-    return { key: `${p.namespace}/${p.name}`, name: p.name, color, tooltip }
+    return { key, name: p.name, color, tooltip }
   }),
 )
 

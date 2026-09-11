@@ -69,6 +69,12 @@ const seedMaxLookback = 30 * 24 * time.Hour
 // not something worth waiting on forever for.
 const seedMaxQueryTimeout = 2 * time.Minute
 
+// deletedPodRetention is how long a deleted pod's tombstone (see
+// k8swatch.Store.deletePod) stays visible on the Distribution view — long
+// enough to notice a pod that just terminated, short enough not to clutter
+// the honeycomb with pods that are truly gone.
+const deletedPodRetention = 60 * time.Second
+
 // clientQPS/clientBurst replace client-go's conservative defaults (5 QPS /
 // burst 10), which are sized for a single-purpose client, not a cluster-wide
 // watcher across nodes, pods, deployments, replicasets, statefulsets, and
@@ -208,7 +214,7 @@ func run(log *slog.Logger) error {
 	srv.StartAlertWorker(ctx)
 
 	metricsClient := metricsclient.New(metricsSet)
-	go pollMetrics(ctx, log, metricsClient, usage, srv, cfg.MetricsPollInterval)
+	go pollMetrics(ctx, log, metricsClient, usage, watchStore, srv, cfg.MetricsPollInterval)
 
 	mux := srv.Routes()
 	mux.Handle("/metrics", promhttp.Handler())
@@ -247,7 +253,7 @@ func buildKubeConfig() (*rest.Config, error) {
 	return clientcmd.BuildConfigFromFlags("", kubeconfig)
 }
 
-func pollMetrics(ctx context.Context, log *slog.Logger, client metricsclient.Client, usage *usagecache.Cache, srv *api.Server, interval time.Duration) {
+func pollMetrics(ctx context.Context, log *slog.Logger, client metricsclient.Client, usage *usagecache.Cache, watch *k8swatch.Store, srv *api.Server, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -266,6 +272,11 @@ func pollMetrics(ctx context.Context, log *slog.Logger, client metricsclient.Cli
 				continue
 			}
 			usage.Update(nodes, pods)
+			// Piggybacked on this same tick rather than a dedicated
+			// goroutine — the Distribution view's "still visible for a
+			// short grace period after deletion" tombstone just needs to
+			// disappear roughly on time, not to the second.
+			watch.PruneDeleted(deletedPodRetention)
 			srv.Recompute("metrics poll")
 		}
 	}

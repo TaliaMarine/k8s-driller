@@ -291,6 +291,10 @@ func (s *Server) handleStreamWorkloads(w http.ResponseWriter, r *http.Request) {
 	s.hub.ServeHTTP(w, r, "workloads")
 }
 
+func (s *Server) handleStreamWorkloadsDistribution(w http.ResponseWriter, r *http.Request) {
+	s.hub.ServeHTTP(w, r, "workloads-distribution")
+}
+
 func (s *Server) handleNodeHistory(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, ok := s.watch.Node(name); !ok {
@@ -333,6 +337,10 @@ func (s *Server) handleStreamCluster(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStreamNode(w http.ResponseWriter, r *http.Request) {
 	s.hub.ServeHTTP(w, r, "node:"+r.PathValue("name"))
+}
+
+func (s *Server) handleStreamNodeDistribution(w http.ResponseWriter, r *http.Request) {
+	s.hub.ServeHTTP(w, r, "node-distribution:"+r.PathValue("name"))
 }
 
 func (s *Server) handleStreamAlerts(w http.ResponseWriter, r *http.Request) {

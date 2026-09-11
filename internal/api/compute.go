@@ -2,22 +2,11 @@ package api
 
 import (
 	"sort"
+	"time"
 
 	"github.com/TaliaMarine/k8s-driller/internal/k8swatch"
 	"github.com/TaliaMarine/k8s-driller/internal/pressure"
 )
-
-// isTerminalPhase reports whether a pod has permanently stopped running —
-// Succeeded or Failed — and therefore no longer holds any resource
-// reservation on its node (the kubelet releases it once every container has
-// exited for good). Pending is deliberately NOT terminal here: a pod is
-// already counted against the node's allocatable capacity from the moment
-// it's scheduled/bound, before its containers actually start, so excluding
-// Pending would understate allocation exactly when it matters most — a
-// burst of pods being scheduled at once.
-func isTerminalPhase(phase string) bool {
-	return phase == "Succeeded" || phase == "Failed"
-}
 
 // activePods filters out terminal pods, e.g. a finished Job/CronJob pod
 // still lingering until garbage collection — it holds no resource
@@ -26,13 +15,33 @@ func isTerminalPhase(phase string) bool {
 // Tombstoned pods (DeletedAt set, see k8swatch.Store.deletePod) are
 // excluded here too, for the same reason — the Distribution view's
 // dedicated builders below are the one deliberate exception that wants
-// them.
+// them (within a short grace period, see withinDeadPodGracePeriod).
 func activePods(pods []k8swatch.PodInfo) []k8swatch.PodInfo {
 	out := make([]k8swatch.PodInfo, 0, len(pods))
 	for _, p := range pods {
-		if !isTerminalPhase(p.Phase) && p.DeletedAt == nil {
+		if !k8swatch.IsTerminalPhase(p.Phase) && p.DeletedAt == nil {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+// withinDeadPodGracePeriod keeps a pod that's no longer live only if it
+// became so (TerminalAt) within k8swatch.DeadPodGracePeriod — a completed
+// Job pod otherwise lingers in Kubernetes (and therefore in this view)
+// until GC, which can be far longer than that grace period, flooding the
+// Distribution honeycomb with pods that stopped being interesting a while
+// ago. Pods that never went terminal (TerminalAt nil) pass through
+// unaffected; deleted pods are handled separately by
+// k8swatch.Store.PruneDeleted actually removing them from the store once
+// their own grace period elapses.
+func withinDeadPodGracePeriod(pods []k8swatch.PodInfo) []k8swatch.PodInfo {
+	out := make([]k8swatch.PodInfo, 0, len(pods))
+	for _, p := range pods {
+		if p.TerminalAt != nil && time.Since(*p.TerminalAt) > k8swatch.DeadPodGracePeriod {
+			continue
+		}
+		out = append(out, p)
 	}
 	return out
 }
@@ -185,15 +194,19 @@ func (s *Server) buildAllPodDTOs() []PodDTO {
 }
 
 // buildNodePodDistributionDTOs returns every pod k8swatch still knows about
-// for this node — including ones that aren't Ready and ones recently
-// deleted (see k8swatch.Store.PruneDeleted) — sorted oldest-first by
-// creation time. This deliberately sees more than buildNodePodDTOs: the
-// Distribution honeycomb (SPECS.md §7.1) is the one view that wants to show
-// not-Ready pods (gray) and recently-terminated ones (darker gray) instead
+// for this node — including ones that aren't Ready — sorted oldest-first
+// by creation time, but only within k8swatch.DeadPodGracePeriod of no
+// longer being live: a deleted pod is pruned from the store itself after
+// that window (k8swatch.Store.PruneDeleted), and withinDeadPodGracePeriod
+// filters out a terminal (Succeeded/Failed) pod once it's been that long
+// since it finished, even though Kubernetes itself may keep it around
+// much longer pending GC. This deliberately sees more than buildNodePodDTOs:
+// the Distribution honeycomb (SPECS.md §7.1) is the one view that wants to
+// show not-Ready pods (gray) and recently-dead ones (darker gray) instead
 // of silently excluding them like every pressure/allocation total and pod
-// list elsewhere in the app does.
+// list elsewhere in the app does — just not forever.
 func (s *Server) buildNodePodDistributionDTOs(nodeName string) []PodDTO {
-	pods := s.watch.PodsOnNode(nodeName)
+	pods := withinDeadPodGracePeriod(s.watch.PodsOnNode(nodeName))
 	sortPodsByCreation(pods)
 	dtos := make([]PodDTO, 0, len(pods))
 	for _, p := range pods {
@@ -210,6 +223,7 @@ func (s *Server) buildAllPodDistributionDTOs() []PodDTO {
 	for _, n := range s.watch.Nodes() {
 		pods = append(pods, s.watch.PodsOnNode(n.Name)...)
 	}
+	pods = withinDeadPodGracePeriod(pods)
 	sortPodsByCreation(pods)
 	dtos := make([]PodDTO, 0, len(pods))
 	for _, p := range pods {

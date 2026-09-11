@@ -29,6 +29,28 @@ type ControllerRef struct {
 	Name string
 }
 
+// DeadPodGracePeriod is how long a pod that's no longer live — deleted from
+// the cluster (DeletedAt) or terminally completed (TerminalAt, e.g. a
+// finished Job pod) — stays visible on the Distribution view before being
+// treated as gone. Kubernetes itself can leave a completed/failed pod
+// around far longer than this (GC, successfulJobsHistoryLimit, etc.), and a
+// deleted pod's informer tombstone only needs a brief grace period, so both
+// share one short, deliberately app-level cutoff rather than either
+// depending on however long the cluster happens to keep the object around.
+const DeadPodGracePeriod = 60 * time.Second
+
+// IsTerminalPhase reports whether a pod has permanently stopped running —
+// Succeeded or Failed — and therefore no longer holds any resource
+// reservation on its node (the kubelet releases it once every container has
+// exited for good). Pending is deliberately NOT terminal here: a pod is
+// already counted against the node's allocatable capacity from the moment
+// it's scheduled/bound, before its containers actually start, so excluding
+// Pending would understate allocation exactly when it matters most — a
+// burst of pods being scheduled at once.
+func IsTerminalPhase(phase string) bool {
+	return phase == "Succeeded" || phase == "Failed"
+}
+
 // PodInfo is everything the pressure engine and API layer need about one
 // pod's spec (not its live usage).
 type PodInfo struct {
@@ -38,6 +60,14 @@ type PodInfo struct {
 	Phase             string
 	Ready             bool // pod's own Ready condition — distinct from Phase (e.g. Running but failing readiness)
 	CreationTimestamp time.Time
+	// TerminalAt is set once, the first time this pod is observed in a
+	// terminal phase (IsTerminalPhase) — e.g. a finished Job pod — and never
+	// updated again after that, so it marks when the pod stopped being live
+	// rather than being reset by every subsequent informer resync of the
+	// same terminal pod. Distribution-view builders use it to stop showing
+	// a completed pod after DeadPodGracePeriod, instead of however long
+	// Kubernetes itself takes to actually garbage-collect it.
+	TerminalAt *time.Time
 	// DeletedAt is nil while the pod still exists in the cluster. Once the
 	// informer sees it deleted, deletePod sets this instead of dropping the
 	// entry immediately, so the Distribution view's honeycomb can keep
@@ -303,21 +333,35 @@ func (s *Store) upsertPod(obj interface{}) {
 		return
 	}
 	names, resources := toContainerResources(pod.Spec.Containers)
+	phase := string(pod.Status.Phase)
+	key := pod.Namespace + "/" + pod.Name
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Preserve an already-set TerminalAt across every subsequent
+	// informer resync of the same terminal pod — only the first
+	// observation should start the clock.
+	terminalAt := s.pods[key].TerminalAt
+	if terminalAt == nil && IsTerminalPhase(phase) {
+		now := time.Now()
+		terminalAt = &now
+	}
+
 	info := PodInfo{
 		Namespace:         pod.Namespace,
 		Name:              pod.Name,
 		NodeName:          pod.Spec.NodeName,
-		Phase:             string(pod.Status.Phase),
+		Phase:             phase,
 		Ready:             podReady(pod),
 		CreationTimestamp: pod.CreationTimestamp.Time,
+		TerminalAt:        terminalAt,
 		Controller:        s.resolveController(pod),
 		ContainerNames:    names,
 		Containers:        resources,
 		Labels:            pod.Labels,
 	}
-	s.mu.Lock()
-	s.pods[pod.Namespace+"/"+pod.Name] = info
-	s.mu.Unlock()
+	s.pods[key] = info
 }
 
 // deletePod marks the pod deleted rather than removing it outright — see
@@ -348,13 +392,17 @@ func (s *Store) deletePod(obj interface{}) {
 
 // PruneDeleted removes tombstoned pods (see deletePod) whose grace period
 // has elapsed, so pods deleted from the cluster don't linger in memory
-// forever just because the Distribution view briefly shows them.
-func (s *Store) PruneDeleted(retention time.Duration) {
+// forever just because the Distribution view briefly shows them. Terminal
+// (Succeeded/Failed) pods that Kubernetes hasn't deleted yet are left in
+// place — they're still real, queryable objects — the Distribution view's
+// builders filter those by TerminalAt age instead (internal/api/compute.go)
+// rather than this removing them from the store itself.
+func (s *Store) PruneDeleted() {
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for key, info := range s.pods {
-		if info.DeletedAt != nil && now.Sub(*info.DeletedAt) > retention {
+		if info.DeletedAt != nil && now.Sub(*info.DeletedAt) > DeadPodGracePeriod {
 			delete(s.pods, key)
 		}
 	}

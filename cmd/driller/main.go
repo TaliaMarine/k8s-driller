@@ -69,12 +69,6 @@ const seedMaxLookback = 30 * 24 * time.Hour
 // not something worth waiting on forever for.
 const seedMaxQueryTimeout = 2 * time.Minute
 
-// deletedPodRetention is how long a deleted pod's tombstone (see
-// k8swatch.Store.deletePod) stays visible on the Distribution view — long
-// enough to notice a pod that just terminated, short enough not to clutter
-// the honeycomb with pods that are truly gone.
-const deletedPodRetention = 60 * time.Second
-
 // clientQPS/clientBurst replace client-go's conservative defaults (5 QPS /
 // burst 10), which are sized for a single-purpose client, not a cluster-wide
 // watcher across nodes, pods, deployments, replicasets, statefulsets, and
@@ -276,7 +270,7 @@ func pollMetrics(ctx context.Context, log *slog.Logger, client metricsclient.Cli
 			// goroutine — the Distribution view's "still visible for a
 			// short grace period after deletion" tombstone just needs to
 			// disappear roughly on time, not to the second.
-			watch.PruneDeleted(deletedPodRetention)
+			watch.PruneDeleted()
 			srv.Recompute("metrics poll")
 		}
 	}

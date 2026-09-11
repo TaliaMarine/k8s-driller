@@ -298,12 +298,18 @@ bars), and "Distribution" — a honeycomb with one hexagon per pod, oldest-creat
 usage sits to that pod's own request/limit ceiling using the same healthy/warning/critical severity scale as
 elsewhere. Unlike the other two tabs (and every pod count/pressure total in the app), Distribution
 deliberately also shows pods the rest of the app excludes: a pod whose own Ready condition is false renders
-gray, and a pod deleted from the cluster keeps rendering — darker gray — for a 60-second grace period after
-deletion (`k8swatch.Store.PruneDeleted`) before disappearing, so a just-terminated pod doesn't vanish without
-a trace. This is why Distribution is fed by its own dedicated SSE topic (§6.2) rather than the same stream
-the pod list/treemap/bars use — those must keep excluding not-Ready/deleted pods from every count and total,
-so the two paths diverge at the source instead of filtering client-side. Clicking a hexagon filters the pod
-list below to that pod, same as clicking a workload cell in the other two tabs.
+gray, and a pod that's no longer live — deleted from the cluster, or terminally completed (e.g. a finished Job
+pod) — keeps rendering, darker gray, for `k8swatch.DeadPodGracePeriod` (60s) after it stopped being live,
+before disappearing. That grace period is deliberately app-level and short regardless of how long Kubernetes
+itself keeps the object around (GC, `successfulJobsHistoryLimit`, etc.) — a deleted pod's tombstone entry is
+actually removed from the store once it elapses (`k8swatch.Store.PruneDeleted`), while a terminal-but-still-
+present pod is instead filtered out of just the Distribution builders by age (`withinDeadPodGracePeriod`,
+`internal/api/compute.go`) without touching the store, since it's still a real object the informer will just
+re-add on its next resync anyway. Either way, the honeycomb never floods with dead pods just because
+Kubernetes hasn't cleaned them up yet. This is why Distribution is fed by its own dedicated SSE topic (§6.2)
+rather than the same stream the pod list/treemap/bars use — those must keep excluding not-Ready/dead pods
+from every count and total, so the two paths diverge at the source instead of filtering client-side. Clicking
+a hexagon filters the pod list below to that pod, same as clicking a workload cell in the other two tabs.
 4. **Role Management** (`/admin/users`, admin-only) — table of OIDC users with role dropdown; the
    first-ever admin promotion flow (using the bootstrap token) is a distinct, clearly-labeled one-time
    screen, not mixed into routine role editing.

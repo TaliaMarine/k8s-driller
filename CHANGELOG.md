@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.15.1...v2.16.0) (2026-09-12)
+
+
+### Features
+
+* per-node distribution split, clickable filter chips, combined usage/max ring ([55e6ad7](https://github.com/TaliaMarine/k8s-driller/commit/55e6ad7edccdd399603470595f96eb4672458050))
+
 ## [2.15.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.15.0...v2.15.1) (2026-09-11)
 
 

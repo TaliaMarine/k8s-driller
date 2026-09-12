@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.16.0...v2.16.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* serve index.html for unmatched paths so SPA deep links don't 404 ([5994b2b](https://github.com/TaliaMarine/k8s-driller/commit/5994b2bb1c4a0451dee3f264923a4b1e028ced0a))
+
 ## [2.16.0](https://github.com/TaliaMarine/k8s-driller/compare/v2.15.1...v2.16.0) (2026-09-12)
 
 

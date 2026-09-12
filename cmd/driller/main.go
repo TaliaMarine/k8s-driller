@@ -364,5 +364,18 @@ func mountStaticFrontend(mux *http.ServeMux, log *slog.Logger) {
 		log.Warn("static frontend directory not found, serving API only", "dir", staticDir)
 		return
 	}
-	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
+	fileServer := http.FileServer(http.Dir(staticDir))
+	indexPath := filepath.Join(staticDir, "index.html")
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The frontend's Vue Router uses createWebHistory (clean URLs), so a
+		// deep link like /workloads has no matching file on disk — fall back
+		// to index.html and let the client-side router take over, instead of
+		// plain http.FileServer's 404.
+		path := filepath.Join(staticDir, filepath.Clean(r.URL.Path))
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			http.ServeFile(w, r, indexPath)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	}))
 }

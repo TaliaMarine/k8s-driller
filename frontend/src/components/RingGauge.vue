@@ -19,22 +19,67 @@ const scaleMax = computed(() =>
   Math.max(props.usage, props.request ?? 0, props.limit ?? 0, props.maxUsage ?? 0, 1),
 )
 
-interface Ring {
+const USAGE_COLOR = 'rgb(var(--v-theme-watch))'
+const DANGER_COLOR = 'rgb(var(--v-theme-critical))'
+// Dark blue, drawn behind Usage in the same lane — Usage is always <= Max,
+// so its brighter arc sits on top of (and is bounded by) this one.
+const MAX_COLOR = '#01579B'
+// Barely a shade above the unfilled track (0.1 alpha below) rather than the
+// old 0.55 — Limits is a ceiling to glance at, not a value to compete with
+// Usage/Max/Requests for attention.
+const LIMIT_COLOR = 'rgba(var(--v-theme-on-surface), 0.2)'
+
+interface RingLayer {
+  color: string
+  value: number
+}
+interface Lane {
+  key: string
+  layers: RingLayer[] // painted in order — later layers sit on top
+}
+
+// Usage and Max share one lane instead of each getting their own ring: Max
+// (dark blue) paints first as the outer bound, then Usage (blue, or red
+// when danger) paints over it, so the overlap itself shows how much
+// headroom is left between current usage and the historical peak.
+const lanes = computed<Lane[]>(() => {
+  const out: Lane[] = []
+
+  const usageMaxLayers: RingLayer[] = []
+  if (props.maxUsage != null) usageMaxLayers.push({ color: MAX_COLOR, value: props.maxUsage })
+  usageMaxLayers.push({ color: props.danger ? DANGER_COLOR : USAGE_COLOR, value: props.usage })
+  out.push({ key: 'usage', layers: usageMaxLayers })
+
+  if (props.request != null) {
+    out.push({
+      key: 'request',
+      layers: [{ color: 'rgb(var(--v-theme-healthy))', value: props.request }],
+    })
+  }
+  if (props.limit != null) {
+    out.push({ key: 'limit', layers: [{ color: LIMIT_COLOR, value: props.limit }] })
+  }
+  return out
+})
+
+interface LegendItem {
   key: string
   label: string
   value: number
   color: string
 }
 
-const rings = computed<Ring[]>(() => {
-  const out: Ring[] = [
+const legendItems = computed<LegendItem[]>(() => {
+  const out: LegendItem[] = [
     {
       key: 'usage',
       label: 'Usage',
       value: props.usage,
-      color: props.danger ? 'rgb(var(--v-theme-critical))' : 'rgb(var(--v-theme-watch))',
+      color: props.danger ? DANGER_COLOR : USAGE_COLOR,
     },
   ]
+  if (props.maxUsage != null)
+    out.push({ key: 'max', label: 'Max', value: props.maxUsage, color: MAX_COLOR })
   if (props.request != null) {
     out.push({
       key: 'request',
@@ -43,17 +88,8 @@ const rings = computed<Ring[]>(() => {
       color: 'rgb(var(--v-theme-healthy))',
     })
   }
-  if (props.limit != null) {
-    out.push({
-      key: 'limit',
-      label: 'Limits',
-      value: props.limit,
-      color: 'rgba(var(--v-theme-on-surface), 0.55)',
-    })
-  }
-  if (props.maxUsage != null) {
-    out.push({ key: 'max', label: 'Max', value: props.maxUsage, color: 'rgba(198, 40, 40, 0.55)' })
-  }
+  if (props.limit != null)
+    out.push({ key: 'limit', label: 'Limits', value: props.limit, color: LIMIT_COLOR })
   return out
 })
 
@@ -79,7 +115,7 @@ function dashArray(value: number, radius: number): string {
     <v-row no-gutters>
       <v-col cols="12" sm="6" class="d-flex justify-center align-center">
         <svg :viewBox="`0 0 ${SIZE} ${SIZE}`" class="ring-gauge-svg">
-          <g v-for="(ring, i) in rings" :key="ring.key">
+          <g v-for="(lane, i) in lanes" :key="lane.key">
             <circle
               :cx="CENTER"
               :cy="CENTER"
@@ -89,23 +125,25 @@ function dashArray(value: number, radius: number): string {
               :stroke-width="RING_WIDTH"
             />
             <circle
+              v-for="layer in lane.layers"
+              :key="layer.color"
               :cx="CENTER"
               :cy="CENTER"
               :r="radiusFor(i)"
               fill="none"
-              :stroke="ring.color"
+              :stroke="layer.color"
               :stroke-width="RING_WIDTH"
               stroke-linecap="round"
-              :stroke-dasharray="dashArray(ring.value, radiusFor(i))"
+              :stroke-dasharray="dashArray(layer.value, radiusFor(i))"
               :transform="`rotate(-90 ${CENTER} ${CENTER})`"
             />
           </g>
         </svg>
       </v-col>
       <v-col cols="12" sm="6" class="ring-gauge-legend">
-        <div v-for="ring in rings" :key="ring.key" class="d-flex align-center ga-2 mb-1">
-          <span class="ring-swatch" :style="{ background: ring.color }" />
-          <span class="text-body-2">{{ ring.label }}: {{ format(ring.value) }}</span>
+        <div v-for="item in legendItems" :key="item.key" class="d-flex align-center ga-2 mb-1">
+          <span class="ring-swatch" :style="{ background: item.color }" />
+          <span class="text-body-2">{{ item.label }}: {{ format(item.value) }}</span>
         </div>
       </v-col>
     </v-row>

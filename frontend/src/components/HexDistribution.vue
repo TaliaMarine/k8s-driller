@@ -17,7 +17,10 @@ const props = defineProps<{
   resource: 'cpu' | 'mem'
   format: (v: number) => string
 }>()
-const emit = defineEmits<{ select: [name: string] }>()
+// Emits "namespace/name" (not just the pod name) so callers can tell a
+// kube-system pod apart and flip on the kube-system toggle below, the same
+// way TreemapPanel's selection already does.
+const emit = defineEmits<{ select: [key: string] }>()
 
 // Mirrors MiniRatioBar's denom/effectiveRequests logic (limit, or 2x
 // requests when there's no limit; requests, or half the limit when there's
@@ -63,12 +66,12 @@ const cells = computed<HexCell[]>(() =>
     const key = `${p.namespace}/${p.name}`
 
     if (p.deleted) {
-      return { key, value: p.name, color: DELETED_COLOR, tooltip: `${p.name}: deleted` }
+      return { key, value: key, color: DELETED_COLOR, tooltip: `${p.name}: deleted` }
     }
     if (!p.ready) {
       return {
         key,
-        value: p.name,
+        value: key,
         color: NOT_READY_COLOR,
         tooltip: `${p.name}: not ready (${props.format(usage)})`,
       }
@@ -85,7 +88,7 @@ const cells = computed<HexCell[]>(() =>
       ratio != null && denomLabel
         ? `${p.name}: ${props.format(usage)} (${(ratio * 100).toFixed(0)}% of ${denomLabel})`
         : `${p.name}: ${props.format(usage)} — no request or limit configured`
-    return { key, value: p.name, color, tooltip }
+    return { key, value: key, color, tooltip }
   }),
 )
 </script>

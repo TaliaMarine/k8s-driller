@@ -40,6 +40,7 @@ const {
   filteredPods,
   groups,
   clearFilters,
+  toggleFilter,
   filtersActive,
   overCpuRequestCount,
   overMemRequestCount,
@@ -120,11 +121,36 @@ function clearAllFilters() {
   selectedWorkloadKey.value = null
 }
 
-function selectPod(name: string) {
+function selectPod(key: string) {
   clearFilters()
+  const [namespace, name] = key.split('/')
   search.value = name
   selectedWorkloadKey.value = null
+  // Same as selectWorkload above: the list below hides kube-system by
+  // default, so clicking a kube-system pod's hex must flip the toggle on or
+  // its own match would be immediately filtered out.
+  if (namespace === 'kube-system') includeKubeSystem.value = true
 }
+
+// "Split per node" toggle for the Distribution tab — off by default (a flat
+// honeycomb across the whole cluster), grouping distPods by node when on.
+const groupByNode = ref(false)
+interface NodeHexGroup {
+  nodeName: string
+  pods: PodDTO[]
+}
+const distPodsByNode = computed<NodeHexGroup[]>(() => {
+  const byNode = new Map<string, PodDTO[]>()
+  for (const pod of distPods.value ?? []) {
+    const nodeName = pod.nodeName || 'Unscheduled'
+    const group = byNode.get(nodeName)
+    if (group) group.push(pod)
+    else byNode.set(nodeName, [pod])
+  }
+  return [...byNode.entries()]
+    .map(([nodeName, nodePods]) => ({ nodeName, pods: nodePods }))
+    .sort((a, b) => a.nodeName.localeCompare(b.nodeName))
+})
 </script>
 
 <template>
@@ -197,20 +223,51 @@ function selectPod(name: string) {
           </v-window-item>
           <v-window-item value="distribution">
             <v-card-text>
-              <HexDistribution
-                label="CPU"
-                :pods="distPods ?? []"
-                resource="cpu"
-                :format="formatCpu"
-                @select="selectPod"
-              />
-              <HexDistribution
-                label="Memory"
-                :pods="distPods ?? []"
-                resource="mem"
-                :format="formatMem"
-                @select="selectPod"
-              />
+              <div class="d-flex justify-end mb-2">
+                <v-switch
+                  v-model="groupByNode"
+                  label="Split per node"
+                  color="watch"
+                  density="compact"
+                  hide-details
+                  inset
+                />
+              </div>
+              <template v-if="groupByNode">
+                <div v-for="group in distPodsByNode" :key="group.nodeName" class="mb-6">
+                  <div class="text-subtitle-2 mb-1">{{ group.nodeName }}</div>
+                  <HexDistribution
+                    label="CPU"
+                    :pods="group.pods"
+                    resource="cpu"
+                    :format="formatCpu"
+                    @select="selectPod"
+                  />
+                  <HexDistribution
+                    label="Memory"
+                    :pods="group.pods"
+                    resource="mem"
+                    :format="formatMem"
+                    @select="selectPod"
+                  />
+                </div>
+              </template>
+              <template v-else>
+                <HexDistribution
+                  label="CPU"
+                  :pods="distPods ?? []"
+                  resource="cpu"
+                  :format="formatCpu"
+                  @select="selectPod"
+                />
+                <HexDistribution
+                  label="Memory"
+                  :pods="distPods ?? []"
+                  resource="mem"
+                  :format="formatMem"
+                  @select="selectPod"
+                />
+              </template>
             </v-card-text>
           </v-window-item>
         </v-window>
@@ -220,16 +277,20 @@ function selectPod(name: string) {
     <div class="d-flex flex-wrap ga-3 mb-4">
       <v-chip
         :color="overCpuRequestCount > 0 ? 'critical' : 'healthy'"
-        variant="tonal"
+        :variant="activeFilters.includes('over-cpu-request') ? 'flat' : 'tonal'"
         size="small"
+        style="cursor: pointer"
+        @click="toggleFilter('over-cpu-request')"
       >
         <v-icon v-if="overCpuRequestCount > 0" start icon="mdi-alert" />
         {{ overCpuRequestCount }} / {{ scopedPods.length }} pods over CPU request
       </v-chip>
       <v-chip
         :color="overMemRequestCount > 0 ? 'critical' : 'healthy'"
-        variant="tonal"
+        :variant="activeFilters.includes('over-mem-request') ? 'flat' : 'tonal'"
         size="small"
+        style="cursor: pointer"
+        @click="toggleFilter('over-mem-request')"
       >
         <v-icon v-if="overMemRequestCount > 0" start icon="mdi-alert" />
         {{ overMemRequestCount }} / {{ scopedPods.length }} pods over memory request

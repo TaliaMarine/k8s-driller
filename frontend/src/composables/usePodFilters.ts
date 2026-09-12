@@ -234,6 +234,12 @@ export function usePodFilters(pods: Ref<PodDTO[] | null | undefined>) {
     namespaceFilter.value = null
     activeFilters.value = []
   }
+
+  function toggleFilter(filter: string) {
+    activeFilters.value = activeFilters.value.includes(filter)
+      ? activeFilters.value.filter((f) => f !== filter)
+      : [...activeFilters.value, filter]
+  }
   const filtersActive = computed(
     () => search.value !== '' || namespaceFilter.value !== null || activeFilters.value.length > 0,
   )
@@ -276,6 +282,7 @@ export function usePodFilters(pods: Ref<PodDTO[] | null | undefined>) {
     filteredPods,
     groups,
     clearFilters,
+    toggleFilter,
     filtersActive,
     overCpuRequestCount,
     overMemRequestCount,

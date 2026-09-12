@@ -46,6 +46,7 @@ const {
   filteredPods,
   groups,
   clearFilters,
+  toggleFilter,
   filtersActive,
   overCpuRequestCount,
   overMemRequestCount,
@@ -127,10 +128,15 @@ function clearAllFilters() {
   selectedWorkloadKey.value = null
 }
 
-function selectPod(name: string) {
+function selectPod(key: string) {
   clearFilters()
+  const [namespace, name] = key.split('/')
   search.value = name
   selectedWorkloadKey.value = null
+  // Same as selectWorkload above: the list below hides kube-system by
+  // default, so clicking a kube-system pod's hex must flip the toggle on or
+  // its own match would be immediately filtered out.
+  if (namespace === 'kube-system') includeKubeSystem.value = true
 }
 </script>
 
@@ -162,16 +168,20 @@ function selectPod(name: string) {
     <div class="d-flex flex-wrap ga-3 mb-4">
       <v-chip
         :color="overCpuRequestCount > 0 ? 'critical' : 'healthy'"
-        variant="tonal"
+        :variant="activeFilters.includes('over-cpu-request') ? 'flat' : 'tonal'"
         size="small"
+        style="cursor: pointer"
+        @click="toggleFilter('over-cpu-request')"
       >
         <v-icon v-if="overCpuRequestCount > 0" start icon="mdi-alert" />
         {{ overCpuRequestCount }} / {{ scopedPods.length }} pods over CPU request
       </v-chip>
       <v-chip
         :color="overMemRequestCount > 0 ? 'critical' : 'healthy'"
-        variant="tonal"
+        :variant="activeFilters.includes('over-mem-request') ? 'flat' : 'tonal'"
         size="small"
+        style="cursor: pointer"
+        @click="toggleFilter('over-mem-request')"
       >
         <v-icon v-if="overMemRequestCount > 0" start icon="mdi-alert" />
         {{ overMemRequestCount }} / {{ scopedPods.length }} pods over memory request

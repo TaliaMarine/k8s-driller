@@ -72,7 +72,7 @@ func (c *Client) P95PodMemory(ctx context.Context, namespace, pod string, lookba
 }
 
 func (c *Client) scalarQuery(ctx context.Context, query string) (int64, bool, error) {
-	value, _, err := c.api.Query(ctx, query, time.Time{})
+	value, _, _, err := c.api.Query(ctx, query, time.Time{})
 	if err != nil {
 		return 0, false, fmt.Errorf("prometheus query: %w", err)
 	}
@@ -115,7 +115,7 @@ func (c *Client) MaxAllPodsMemory(ctx context.Context, lookback time.Duration) (
 // vectorByPod runs an instant query expected to return one sample per
 // namespace/pod pair and indexes the result by "namespace/pod".
 func (c *Client) vectorByPod(ctx context.Context, query string) (map[string]int64, error) {
-	value, _, err := c.api.Query(ctx, query, time.Time{})
+	value, _, _, err := c.api.Query(ctx, query, time.Time{})
 	if err != nil {
 		return nil, fmt.Errorf("prometheus query: %w", err)
 	}
@@ -187,7 +187,7 @@ func (c *Client) queryRangeMerged(ctx context.Context, query string, start, end 
 	if !c.configured() {
 		return nil, ErrNotConfigured
 	}
-	value, _, err := c.api.QueryRange(ctx, query, promv1.Range{Start: start, End: end, Step: step})
+	value, _, _, err := c.api.QueryRange(ctx, query, promv1.Range{Start: start, End: end, Step: step})
 	if err != nil {
 		return nil, fmt.Errorf("prometheus range query: %w", err)
 	}
@@ -222,7 +222,7 @@ func (c *Client) QueryRange(ctx context.Context, query string, start, end time.T
 	if !c.configured() {
 		return nil, ErrNotConfigured
 	}
-	value, _, err := c.api.QueryRange(ctx, query, promv1.Range{Start: start, End: end, Step: step})
+	value, _, _, err := c.api.QueryRange(ctx, query, promv1.Range{Start: start, End: end, Step: step})
 	if err != nil {
 		return nil, fmt.Errorf("prometheus range query: %w", err)
 	}

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.16.1...v2.16.2) (2026-11-10)
+
+
+### Bug Fixes
+
+* **deps:** upgrade backend, frontend and GitHub Actions dependencies ([6039b03](https://github.com/TaliaMarine/k8s-driller/commit/6039b03b7e01608802d9b8b4bd3d066f839334e6))
+
 ## [2.16.1](https://github.com/TaliaMarine/k8s-driller/compare/v2.16.0...v2.16.1) (2026-09-12)
 
 

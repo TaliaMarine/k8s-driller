@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.4](https://github.com/TaliaMarine/k8s-driller/compare/v2.16.3...v2.16.4) (2026-11-17)
+
+
+### Bug Fixes
+
+* honor DRILLER_PROMETHEUS_ENABLED=false ([8e75748](https://github.com/TaliaMarine/k8s-driller/commit/8e757486d98a88441e6d9e10c84f00a448f2bf35))
+
 ## [2.16.3](https://github.com/TaliaMarine/k8s-driller/compare/v2.16.2...v2.16.3) (2026-11-17)
 
 

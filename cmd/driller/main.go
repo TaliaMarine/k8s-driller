@@ -155,7 +155,13 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	prom, err := promclient.New(cfg.PrometheusBaseURL)
+	// A base URL alone must not enable Prometheus: the chart always renders
+	// DRILLER_PROMETHEUS_BASE_URL, so honour the explicit enabled flag.
+	promURL := ""
+	if cfg.PrometheusEnabled {
+		promURL = cfg.PrometheusBaseURL
+	}
+	prom, err := promclient.New(promURL)
 	if err != nil {
 		return err
 	}
@@ -203,7 +209,9 @@ func run(log *slog.Logger) error {
 	// for failing /healthz, an unrecoverable crash loop. Seeding is a
 	// best-effort startup enhancement, not something worth the app's
 	// availability.
-	go seedUsageMaxFromProm(ctx, log, prom, watchStore, usage)
+	if cfg.PrometheusEnabled {
+		go seedUsageMaxFromProm(ctx, log, prom, watchStore, usage)
+	}
 
 	srv.StartAlertWorker(ctx)
 

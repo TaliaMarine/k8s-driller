@@ -60,7 +60,8 @@ Full product/architecture spec: [SPECS.md](./SPECS.md).
 
 - A Kubernetes cluster with [metrics-server](https://github.com/kubernetes-sigs/metrics-server) installed
   (required — this is the live usage source).
-- An OIDC provider (issuer URL + client ID/secret) for login.
+- An OIDC provider (issuer URL + client ID) for login. The flow uses PKCE (S256), so a public client
+  without a client secret works; a secret is only needed if your provider insists on a confidential client.
 - *(Optional)* A running Prometheus, for history charts and recommended request/limit values.
 
 ### Install with Helm
@@ -73,11 +74,10 @@ helm install driller oci://ghcr.io/taliamarine/charts/k8s-driller --version 2.0.
   --namespace driller --create-namespace \
   --set oidc.issuerUrl=https://your-issuer.example.com \
   --set oidc.clientId=<client-id> \
-  --set oidc.clientSecretRef.name=<secret-name> \
-  --set oidc.clientSecretRef.key=<secret-key> \
   --set oidc.redirectUrl=https://driller.example.com/api/v1/auth/callback \
-  --set ingress.type=nginx \
-  --set ingress.host=driller.example.com
+  --set ingress.host=driller.example.com \
+  --set ingress.gatewayApi.gatewayName=<gateway> \
+  --set ingress.gatewayApi.gatewayNamespace=<gateway-namespace>
 ```
 
 Or install straight from a checked-out copy of this repo (e.g. for local chart changes):
@@ -87,12 +87,15 @@ helm install driller ./charts/k8s-driller \
   --namespace driller --create-namespace \
   --set oidc.issuerUrl=https://your-issuer.example.com \
   --set oidc.clientId=<client-id> \
-  --set oidc.clientSecretRef.name=<secret-name> \
-  --set oidc.clientSecretRef.key=<secret-key> \
   --set oidc.redirectUrl=https://driller.example.com/api/v1/auth/callback \
-  --set ingress.type=nginx \
-  --set ingress.host=driller.example.com
+  --set ingress.host=driller.example.com \
+  --set ingress.gatewayApi.gatewayName=<gateway> \
+  --set ingress.gatewayApi.gatewayNamespace=<gateway-namespace>
 ```
+
+Ingress defaults to a Gateway API `HTTPRoute` (`ingress.type=gateway-api`); use `--set ingress.type=nginx`
+for a classic Ingress instead. The CRDs in `charts/k8s-driller/crds/` are installed by `helm install`; when rendering
+with `helm template` (Argo CD, kustomize `helmCharts`) pass `--include-crds` / `includeCRDs: true`.
 
 The app generates the admin bootstrap token and session signing key itself on first startup (as Secrets in
 its own namespace) if they don't already exist, and reuses them on every restart — not the chart, and not

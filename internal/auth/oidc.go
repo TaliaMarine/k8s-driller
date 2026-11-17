@@ -29,7 +29,9 @@ type RoleStore interface {
 }
 
 // Authenticator drives the OIDC Authorization Code + PKCE flow (SPECS.md
-// §4.1).
+// §4.1). PKCE (S256) is always used; the client secret is optional, so the
+// app works as a public client (e.g. an authentik application without a
+// secret).
 type Authenticator struct {
 	provider     *oidc.Provider
 	oauth2Config oauth2.Config
@@ -43,13 +45,19 @@ func NewAuthenticator(ctx context.Context, issuerURL, clientID, clientSecret, re
 	if err != nil {
 		return nil, fmt.Errorf("discover OIDC provider: %w", err)
 	}
+	endpoint := provider.Endpoint()
+	if clientSecret == "" {
+		// Public client (PKCE only): send client_id in the form body instead of
+		// letting oauth2 probe for HTTP Basic auth with an empty secret.
+		endpoint.AuthStyle = oauth2.AuthStyleInParams
+	}
 	return &Authenticator{
 		provider: provider,
 		oauth2Config: oauth2.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			RedirectURL:  redirectURL,
-			Endpoint:     provider.Endpoint(),
+			Endpoint:     endpoint,
 			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
 		},
 		verifier: provider.Verifier(&oidc.Config{ClientID: clientID}),

@@ -52,6 +52,8 @@ oidc:
   clientIdRef:
     name: ""
     key: ""
+  # Optional: leave unset for a public client. The login flow always uses
+  # PKCE (S256), so no client secret is needed.
   clientSecretRef:
     name: ""
     key: ""
@@ -99,17 +101,25 @@ integrations:
     enabled: false
     baseUrl: ""
 
-# --- Ingress: exactly one of nginx/gateway-api is rendered (SPECS.md §8.3) ---
+# --- Ingress: exactly one of gateway-api/nginx is rendered (SPECS.md §8.3) ---
+# Gateway API HTTPRoute is the default; nginx Ingress is the fallback.
 ingress:
-  type: none # none | nginx | gateway-api
-  host: ""
+  type: gateway-api # gateway-api | nginx | none
+  host: "" # required unless type is none
   tls:
-    enabled: true
+    enabled: true # nginx only; the Gateway terminates TLS for gateway-api
     secretName: ""
   nginx:
     className: nginx
     annotations: {}
   gatewayApi:
-    gatewayName: ""
-    gatewayNamespace: ""
+    gatewayName: default-gateway
+    gatewayNamespace: envoy-gateway-system
     sectionName: https
+    annotations: {}
+
+# --- CRDs ---
+# The DrillerUserRole / DrillerAlertConfig CRDs live in the chart's crds/
+# directory: `helm install` applies them, but `helm template` (Argo CD /
+# kustomize helmCharts) skips them unless told to include CRDs
+# (`--include-crds` / kustomize `includeCRDs: true`).

@@ -6,6 +6,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "k8s-driller.labels" . | nindent 4 }}
+  {{- with .Values.ingress.gatewayApi.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   parentRefs:
     # group/kind explicit, matching exactly what the Gateway API CRD schema

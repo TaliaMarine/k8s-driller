@@ -422,7 +422,8 @@ charts/k8s-driller/
 
 CRDs live in the chart's top-level `crds/` directory rather than under `templates/`, per Helm's own convention for
 CRDs: installed before every other template, never templated, and never modified on `helm upgrade` (avoids Helm
-silently clobbering a CRD another tool also manages).
+silently clobbering a CRD another tool also manages). Renderers that bypass `helm install` (`helm template`,
+kustomize `helmCharts`, Argo CD) must opt in with `--include-crds` / `includeCRDs: true`.
 
 ### 8.2 RBAC (ClusterRole, read-only + one documented, opt-out exception)
 
@@ -463,7 +464,7 @@ read-only guarantee in §4.2, aside from the single documented `secrets: create`
 
 ```yaml
 ingress:
-  type: none | nginx | gateway-api
+  type: gateway-api | nginx | none   # default gateway-api; nginx is the fallback
   host: driller.example.com
   tls:
     enabled: true
@@ -472,9 +473,10 @@ ingress:
     className: nginx
     annotations: {}
   gatewayApi:
-    gatewayName: ""
-    gatewayNamespace: ""
+    gatewayName: default-gateway
+    gatewayNamespace: envoy-gateway-system
     sectionName: https
+    annotations: {}
 ```
 
 `ingress.yaml` renders a standard `networking.k8s.io/v1` Ingress (className-based, not the deprecated

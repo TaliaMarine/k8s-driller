@@ -55,7 +55,7 @@ jobs:
         run: |
           helm template charts/k8s-driller --set ingress.type=none
           helm template charts/k8s-driller --set ingress.type=nginx --set ingress.host=driller.example.com
-          helm template charts/k8s-driller --set ingress.type=gateway-api --set ingress.host=driller.example.com --set ingress.gatewayApi.gatewayName=my-gw
+          helm template charts/k8s-driller --set ingress.type=gateway-api --set ingress.host=driller.example.com
       - name: Render optional integrations and Prometheus toggles
         run: |
           helm template charts/k8s-driller --set integrations.vpa.enabled=true --set integrations.opencost.enabled=true

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.3](https://github.com/TaliaMarine/k8s-driller/compare/v2.16.2...v2.16.3) (2026-11-17)
+
+
+### Bug Fixes
+
+* default to Gateway API HTTPRoute and support public OIDC clients ([1c34494](https://github.com/TaliaMarine/k8s-driller/commit/1c3449465dbe404dfdd82bf308346b252d6178b6))
+
 ## [2.16.2](https://github.com/TaliaMarine/k8s-driller/compare/v2.16.1...v2.16.2) (2026-11-10)
 
 
